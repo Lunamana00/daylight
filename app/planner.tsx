@@ -1,12 +1,20 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ArrowRight, CalendarDays, Check, CheckCheck, ChevronLeft, ChevronRight, Copy, ExternalLink, Flag, Leaf, Link2, LoaderCircle, LockKeyhole, MoreHorizontal, Pencil, Plus, RefreshCw, Settings2, Share2, Star, Sun, Sunrise, Trash2, Users, X } from "lucide-react";
-import { addDays, today } from "../lib/planner-core";
+import type { PointerEvent as ReactPointerEvent, KeyboardEvent as ReactKeyboardEvent } from "react";
+import { ArrowRight, CalendarDays, Check, CheckCheck, ChevronLeft, ChevronRight, Copy, ExternalLink, Flag, GripVertical, Leaf, Link2, LoaderCircle, LockKeyhole, MoreHorizontal, Pencil, Plus, RefreshCw, Settings2, Share2, Star, Sun, Sunrise, Trash2, Users, X } from "lucide-react";
+import { addDays, milestoneKey, today } from "../lib/planner-core";
 import type { DayData, Milestone, Task } from "../lib/planner-core";
 
 type View = "mine" | "team" | "milestones";
 type Modal = "connections" | "share" | "delete" | null;
+type MilestoneDrag = { key: string; pointerId: number; container: HTMLElement; originalOrder: string[]; items: Milestone[] };
+function moveMilestone(items: Milestone[], from: number, to: number) {
+  const moved = [...items];
+  const [item] = moved.splice(from, 1);
+  moved.splice(to, 0, item);
+  return moved;
+}
 const shortDate = (date: string) => new Intl.DateTimeFormat("ko-KR", { month: "long", day: "numeric" }).format(new Date(date + "T00:00:00Z"));
 const longDate = (date: string) => new Intl.DateTimeFormat("ko-KR", { year: "numeric", month: "long", day: "numeric", weekday: "long", timeZone: "UTC" }).format(new Date(date + "T00:00:00Z"));
 const weekday = (date: string) => new Intl.DateTimeFormat("ko-KR", { weekday: "short", timeZone: "UTC" }).format(new Date(date + "T00:00:00Z"));
@@ -33,6 +41,9 @@ export default function Planner() {
   const [editId, setEditId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState("");
   const [menuId, setMenuId] = useState<string | null>(null);
+  const [milestonePreview, setMilestonePreview] = useState<Milestone[] | null>(null);
+  const [draggingKey, setDraggingKey] = useState<string | null>(null);
+  const milestoneDrag = useRef<MilestoneDrag | null>(null);
   const dateRef = useRef(date);
   const sequence = useRef(0);
   const taskInput = useRef<HTMLInputElement>(null);
@@ -57,7 +68,7 @@ export default function Planner() {
     void load(date);
   }, [date, load]);
   useEffect(() => {
-    const refresh = () => { if (!document.hidden && !busy) void load(dateRef.current); };
+    const refresh = () => { if (!document.hidden && !busy && !milestoneDrag.current) void load(dateRef.current); };
     const timer = setInterval(refresh, 30_000);
     window.addEventListener("focus", refresh);
     return () => { clearInterval(timer); window.removeEventListener("focus", refresh); };
@@ -74,6 +85,12 @@ export default function Planner() {
   useEffect(() => {
     if (modal === "connections" && data) setNameDraft(data.me.name);
   }, [modal, data?.me.name]);
+  useEffect(() => {
+    if (!draggingKey) return;
+    const cancel = (event: KeyboardEvent) => { if (event.key === "Escape") cancelMilestoneDrag(); };
+    window.addEventListener("keydown", cancel);
+    return () => window.removeEventListener("keydown", cancel);
+  }, [draggingKey]);
 
   async function mutate(input: Record<string, unknown>, message?: string) {
     if (busy) return false;
@@ -91,8 +108,67 @@ export default function Planner() {
     finally { setBusy(false); }
   }
   function selectDate(value: string) {
-    if (busy || !value || value < "2000-01-01" || value > "2100-09-01") return;
+    if (busy || milestoneDrag.current || !value || value < "2000-01-01" || value > "2100-09-01") return;
     setDate(value);
+  }
+  async function saveMilestoneOrder(items: Milestone[]) {
+    setMilestonePreview(items);
+    await mutate({ op: "milestones.reorder", date, order: items.map(({ calendarId, eventId }) => ({ calendarId, eventId })) }, "마일스톤 순서를 저장했어요.");
+    setMilestonePreview(null);
+  }
+  function beginMilestoneDrag(event: ReactPointerEvent<HTMLButtonElement>, item: Milestone) {
+    const items = milestonePreview ?? data?.milestones ?? [];
+    if (!event.isPrimary || event.button !== 0 || busy || refreshing || milestoneDrag.current || items.length < 2) return;
+    const container = event.currentTarget.closest("section")!;
+    event.preventDefault();
+    event.currentTarget.focus();
+    milestoneDrag.current = { key: milestoneKey(item), pointerId: event.pointerId, container, originalOrder: items.map(milestoneKey), items };
+    container.setPointerCapture(event.pointerId);
+    setDraggingKey(milestoneKey(item));
+    setMilestonePreview(items);
+  }
+  function moveMilestoneDrag(event: ReactPointerEvent<HTMLElement>) {
+    const drag = milestoneDrag.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    event.preventDefault();
+    if (event.clientY > window.innerHeight - 50) window.scrollBy(0, 20);
+    else if (event.clientY < 50) window.scrollBy(0, -20);
+    const target = document.elementFromPoint(event.clientX, event.clientY)?.closest<HTMLElement>("[data-milestone-key]");
+    if (!target || !event.currentTarget.contains(target)) return;
+    const from = drag.items.findIndex(item => milestoneKey(item) === drag.key);
+    const to = drag.items.findIndex(item => milestoneKey(item) === target.dataset.milestoneKey);
+    if (from < 0 || to < 0 || from === to) return;
+    drag.items = moveMilestone(drag.items, from, to);
+    setMilestonePreview(drag.items);
+  }
+  function cancelMilestoneDrag() {
+    const drag = milestoneDrag.current;
+    if (!drag) return;
+    milestoneDrag.current = null;
+    setDraggingKey(null);
+    setMilestonePreview(null);
+    if (drag.container.hasPointerCapture(drag.pointerId)) drag.container.releasePointerCapture(drag.pointerId);
+  }
+  async function endMilestoneDrag(event: ReactPointerEvent<HTMLElement>) {
+    const drag = milestoneDrag.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    milestoneDrag.current = null;
+    setDraggingKey(null);
+    if (drag.container.hasPointerCapture(drag.pointerId)) drag.container.releasePointerCapture(drag.pointerId);
+    if (drag.items.every((item, index) => milestoneKey(item) === drag.originalOrder[index])) { setMilestonePreview(null); return; }
+    await saveMilestoneOrder(drag.items);
+  }
+  async function milestoneKeyDown(event: ReactKeyboardEvent<HTMLButtonElement>, item: Milestone) {
+    if (event.key === "Escape") { event.preventDefault(); cancelMilestoneDrag(); return; }
+    if (busy || milestoneDrag.current || !["ArrowUp", "ArrowDown"].includes(event.key)) return;
+    event.preventDefault();
+    const items = milestonePreview ?? data?.milestones ?? [];
+    const from = items.findIndex(value => milestoneKey(value) === milestoneKey(item));
+    const to = from + (event.key === "ArrowUp" ? -1 : 1);
+    if (from < 0 || to < 0 || to >= items.length) return;
+    const handle = event.currentTarget;
+    await saveMilestoneOrder(moveMilestone(items, from, to));
+    requestAnimationFrame(() => handle.focus());
   }
   async function copy(value: string, message: string) {
     try { await navigator.clipboard.writeText(value); setToast(message); }
@@ -106,13 +182,15 @@ export default function Planner() {
   const mondayOffset = (new Date(date + "T00:00:00Z").getUTCDay() + 6) % 7;
   const monday = addDays(date, -mondayOffset);
   const week = Array.from({ length: 7 }, (_, i) => addDays(monday, i));
+  const visibleMilestones = milestonePreview ?? data?.milestones ?? [];
   const daysUntil = (value: string) => Math.round((Date.parse(value) - Date.parse(date)) / 86_400_000);
   const badge = (value: string) => daysUntil(value) === 0 ? "D-DAY" : `D-${daysUntil(value)}`;
   const connectionPrompt = calendarName.trim() ? `daylight 사이트 ${typeof window !== "undefined" ? window.location.origin : ""}의 연결된 도구를 사용해줘. Google Calendar에서 내가 팀에 공유할 마일스톤용으로 지정하는 캘린더 ${JSON.stringify(calendarName.trim())}만 읽어서, 한국 시간 오늘부터 90일 뒤까지의 마일스톤을 daylight에 동기화해줘. 페이지가 여러 개면 끝까지 읽고 성공한 뒤에만 sync_google_calendar_milestones를 호출해. 이 캘린더 일정이 사이트의 모든 팀원에게 공유되는 것을 허용해. 일정의 원래 ID와 제목을 유지하고, 종일 일정은 start.date, 시간 일정은 한국 시간 시작 날짜를 사용해. Google 캘린더에는 아무것도 쓰지 마. 내가 직접 작성한 일일 할 일은 get_daily_plan으로 읽기만 하고 추가·수정·완료 처리하지 마. 자동 실행은 아직 설정하지 마.` : "";
 
   function milestoneItem(item: Milestone, expanded = false) {
-    return <div className={`milestone-item ${expanded ? "expanded" : ""}`} key={`${item.ownerId}:${item.calendarId}:${item.eventId}`}>
-      <div className="milestone-point"><Flag size={14} /></div>
+    const key = milestoneKey(item);
+    return <div className={`milestone-item ${expanded ? "expanded" : ""} ${draggingKey === key ? "is-dragging" : ""}`} key={key} data-milestone-key={key}>
+      <button className="milestone-point milestone-drag-handle" type="button" disabled={busy || visibleMilestones.length < 2} onPointerDown={event => beginMilestoneDrag(event, item)} onKeyDown={event => void milestoneKeyDown(event, item)} aria-label={`${item.title} 순서 변경, 위아래 방향키로 이동`} title="드래그하거나 ↑ ↓ 키로 순서 변경"><GripVertical size={16} /></button>
       <div className="milestone-info"><span className="tiny muted">{shortDate(item.date)} · {weekday(item.date)}요일</span><h3>{item.url ? <a href={item.url} target="_blank" rel="noreferrer">{item.title}<ExternalLink size={12} /></a> : item.title}</h3><span className="tiny muted">{item.sourceName}{expanded ? ` · ${item.ownerName} 님이 연결` : ""}</span></div>
       <span className={`due-tag ${daysUntil(item.date) <= 7 ? "near" : ""}`}>{badge(item.date)}</span>
     </div>;
@@ -158,10 +236,10 @@ export default function Planner() {
               const count = tasks.filter(task => task.done).length;
               return <section key={member.id} className="card member-card"><div className="member-card-heading"><Avatar name={member.name} index={i} /><div><h3>{member.name}{member.id === data.me.id && <span className="me-label">나</span>}</h3><span>{tasks.length ? `${tasks.length - count}개의 할 일 · ${count}개 완료` : "아직 오늘의 계획을 적지 않았어요"}</span></div><span className="member-percent">{tasks.length ? Math.round(count / tasks.length * 100) : 0}<small>%</small></span></div><div className="task-progress"><span style={{ width: `${tasks.length ? count / tasks.length * 100 : 0}%` }} /></div>{tasks.length ? <ul className="task-list">{tasks.map(task => taskRow(task, task.ownerId !== data.me.id))}</ul> : <p className="member-empty">각자의 속도로 하루를 준비하고 있어요.</p>}</section>;
             })}<p className="team-refresh-note"><RefreshCw size={12} />열려 있는 동안 30초마다 새 내용을 확인해요.</p></>}
-            {view === "milestones" && <section className="card full-milestones"><div className="section-heading"><div className="section-title"><Flag size={18} /><h2>다가오는 마일스톤</h2><span className="count-pill">{data.milestones.length}</span></div><span className="tiny muted">선택한 날부터 90일</span></div><p className="milestone-intro">큰 목표와 마감은 이곳에, 실행할 일은 각자의 하루에.</p>{data.milestones.length ? data.milestones.map(item => milestoneItem(item, true)) : <div className="empty-milestones"><Flag size={34} strokeWidth={1.4} /><h3>{data.sources.length ? "이 기간에 등록된 마일스톤이 없어요" : "큰 목표를 연결해보세요"}</h3><p>{data.sources.length ? "마지막 동기화 시점의 캘린더를 표시하고 있어요." : "dots를 통해 선택한 구글 캘린더를 불러올 수 있어요."}</p><button className="button secondary" onClick={() => setModal("connections")}><Link2 size={14} />연결 관리</button></div>}</section>}
+            {view === "milestones" && <section className="card full-milestones" onPointerMove={moveMilestoneDrag} onPointerUp={event => void endMilestoneDrag(event)} onPointerCancel={cancelMilestoneDrag} onLostPointerCapture={cancelMilestoneDrag}><div className="section-heading"><div className="section-title"><Flag size={18} /><h2>다가오는 마일스톤</h2><span className="count-pill">{data.milestones.length}</span></div><span className="tiny muted">선택한 날부터 90일</span></div><p className="milestone-intro">왼쪽 손잡이를 드래그해 순서를 바꾸세요. 변경한 순서는 팀과 공유됩니다.</p>{data.milestones.length ? visibleMilestones.map(item => milestoneItem(item, true)) : <div className="empty-milestones"><Flag size={34} strokeWidth={1.4} /><h3>{data.sources.length ? "이 기간에 등록된 마일스톤이 없어요" : "큰 목표를 연결해보세요"}</h3><p>{data.sources.length ? "마지막 동기화 시점의 캘린더를 표시하고 있어요." : "dots를 통해 선택한 구글 캘린더를 불러올 수 있어요."}</p><button className="button secondary" onClick={() => setModal("connections")}><Link2 size={14} />연결 관리</button></div>}</section>}
           </div>
           <aside className="right-column">
-            <section className="card milestones-card"><div className="section-heading"><div className="section-title"><Flag size={16} /><h2>다가오는 마일스톤</h2></div><button className="icon-button" aria-label="전체 마일스톤 보기" onClick={() => setView("milestones")}><ArrowRight size={16} /></button></div><div className="source-label"><span className="google-calendar-icon">31</span>Google Calendar<span className={`source-state ${data.sources.length ? "connected" : ""}`}>{data.sources.length ? "가져온 일정" : "연결 전"}</span></div>{data.milestones.length ? data.milestones.slice(0, 4).map(item => milestoneItem(item)) : <div className="milestones-mini-empty"><div className="calendar-drawing"><span /><i /><i /><i /><i /><i /><i /><i /><i /><i /></div><p>{data.sources.length ? "예정된 마일스톤이 없어요" : "중요한 목표를 한눈에"}</p><span>{data.sources.length ? "마지막으로 가져온 일정 기준이에요." : "마감과 목표를 캘린더에서 가져와요."}</span>{!data.sources.length && <button className="text-button" onClick={() => setModal("connections")}>캘린더 연결하기<ArrowRight size={13} /></button>}</div>}<div className="milestone-card-footer"><RefreshCw size={11} /><span>{data.sources.length ? `최근 동기화 ${syncTime(data.sources[0].syncedAt)}` : "dots를 통해 동기화해요"}</span></div></section>
+            <section className="card milestones-card" onPointerMove={moveMilestoneDrag} onPointerUp={event => void endMilestoneDrag(event)} onPointerCancel={cancelMilestoneDrag} onLostPointerCapture={cancelMilestoneDrag}><div className="section-heading"><div className="section-title"><Flag size={16} /><h2>다가오는 마일스톤</h2></div><button className="icon-button" aria-label="전체 마일스톤 보기" onClick={() => setView("milestones")}><ArrowRight size={16} /></button></div><div className="source-label"><span className="google-calendar-icon">31</span>Google Calendar<span className={`source-state ${data.sources.length ? "connected" : ""}`}>{data.sources.length ? "가져온 일정" : "연결 전"}</span></div>{data.milestones.length ? visibleMilestones.slice(0, 4).map(item => milestoneItem(item)) : <div className="milestones-mini-empty"><div className="calendar-drawing"><span /><i /><i /><i /><i /><i /><i /><i /><i /><i /></div><p>{data.sources.length ? "예정된 마일스톤이 없어요" : "중요한 목표를 한눈에"}</p><span>{data.sources.length ? "마지막으로 가져온 일정 기준이에요." : "마감과 목표를 캘린더에서 가져와요."}</span>{!data.sources.length && <button className="text-button" onClick={() => setModal("connections")}>캘린더 연결하기<ArrowRight size={13} /></button>}</div>}<div className="milestone-card-footer"><RefreshCw size={11} /><span>{data.sources.length ? `최근 동기화 ${syncTime(data.sources[0].syncedAt)}` : "dots를 통해 동기화해요"}</span></div></section>
           </aside>
         </div>}
         <footer className="main-footer"><span>조금씩, 꾸준히, 함께.</span><span>daylight · Asia/Seoul</span></footer>

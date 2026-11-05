@@ -23,7 +23,7 @@ export async function POST(request: Request) {
     const user = await getChatGPTUser();
     if (!user) return Response.json({ error: "로그인이 필요합니다." }, { status: 401, headers });
     const body = await request.text();
-    if (body.length > 16_384) throw new PlannerError("요청 내용이 너무 큽니다.");
+    if (body.length > 2_000_000) throw new PlannerError("요청 내용이 너무 큽니다.");
     let input;
     try { input = JSON.parse(body); } catch { throw new PlannerError("올바른 요청이 아닙니다."); }
     if (!input || typeof input !== "object" || Array.isArray(input)) throw new PlannerError("올바른 요청이 아닙니다.");

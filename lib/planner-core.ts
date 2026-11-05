@@ -6,6 +6,7 @@ export type Note = { ownerId: string; date: string; content: string; updatedAt: 
 export type Milestone = { ownerId: string; calendarId: string; eventId: string; title: string; date: string; url: string | null; ownerName: string; sourceName: string; syncedAt: string };
 export type Source = { ownerId: string; calendarId: string; name: string; syncedAt: string; ownerName: string };
 export type DayData = { date: string; me: Member; members: Member[]; tasks: Task[]; notes: Note[]; milestones: Milestone[]; sources: Source[] };
+export const milestoneKey = (item: { calendarId: string; eventId: string }) => JSON.stringify([item.calendarId, item.eventId]);
 
 export class PlannerError extends Error {
   status: number;
@@ -38,7 +39,7 @@ export async function ensureMember(db: D1Database, user: Identity) {
 export async function listMilestones(db: D1Database, from: string, to: string) {
   day(from); day(to);
   if (to < from || to > addDays(from, 366)) throw new PlannerError("마일스톤 조회 기간은 1년 이내로 선택해주세요.");
-  const result = await db.prepare("SELECT m.owner_id AS ownerId,m.calendar_id AS calendarId,m.event_id AS eventId,m.title,m.date,m.url,m.synced_at AS syncedAt,p.name AS ownerName,s.name AS sourceName FROM milestones m JOIN members p ON p.id=m.owner_id JOIN calendar_sources s ON s.calendar_id=m.calendar_id WHERE m.date>=? AND m.date<=? ORDER BY m.date,m.title LIMIT 1000").bind(from, to).all<Milestone>();
+  const result = await db.prepare("SELECT m.owner_id AS ownerId,m.calendar_id AS calendarId,m.event_id AS eventId,m.title,m.date,m.url,m.synced_at AS syncedAt,p.name AS ownerName,s.name AS sourceName FROM milestones m JOIN members p ON p.id=m.owner_id JOIN calendar_sources s ON s.calendar_id=m.calendar_id LEFT JOIN milestone_order o ON o.calendar_id=m.calendar_id AND o.event_id=m.event_id WHERE m.date>=? AND m.date<=? ORDER BY o.position IS NULL,o.position,m.date,m.title,m.calendar_id,m.event_id LIMIT 1000").bind(from, to).all<Milestone>();
   return result.results;
 }
 export async function readDay(db: D1Database, user: Identity, date: string): Promise<DayData> {
@@ -56,6 +57,21 @@ export async function readDay(db: D1Database, user: Identity, date: string): Pro
 export async function change(db: D1Database, user: Identity, input: Record<string, unknown>) {
   await ensureMember(db, user);
   const now = new Date().toISOString();
+  if (input.op === "milestones.reorder") {
+    const date = day(input.date);
+    if (!Array.isArray(input.order) || input.order.length > 1000) throw new PlannerError("올바른 마일스톤 순서가 아닙니다.");
+    const order = input.order.map((value: unknown) => {
+      if (!value || typeof value !== "object" || Array.isArray(value)) throw new PlannerError("올바른 마일스톤 순서가 아닙니다.");
+      const item = value as Record<string, unknown>;
+      return { calendarId: text(item.calendarId, "캘린더 ID", 300), eventId: text(item.eventId, "일정 ID", 1024) };
+    });
+    const keys = new Set(order.map(milestoneKey));
+    if (keys.size !== order.length) throw new PlannerError("중복된 마일스톤이 있습니다.");
+    const current = await listMilestones(db, date, addDays(date, 90) > "2100-12-31" ? "2100-12-31" : addDays(date, 90));
+    if (current.length !== order.length || current.some(item => !keys.has(milestoneKey(item)))) throw new PlannerError("마일스톤 목록이 바뀌었어요. 새로고침 후 다시 옮겨주세요.", 409);
+    if (order.length) await db.batch(order.map((item, position) => db.prepare("INSERT INTO milestone_order (calendar_id,event_id,position) VALUES (?,?,?) ON CONFLICT(calendar_id,event_id) DO UPDATE SET position=excluded.position").bind(item.calendarId, item.eventId, position)));
+    return { saved: true };
+  }
   if (input.op === "task.add") {
     const id = crypto.randomUUID();
     await db.prepare("INSERT INTO tasks (id,owner_id,date,title,done,important,created_at,updated_at) VALUES (?,?,?,?,0,?,?,?)").bind(id, user.userId, day(input.date), text(input.title, "할 일", 240), input.important === undefined ? 0 : bool(input.important), now, now).run();
