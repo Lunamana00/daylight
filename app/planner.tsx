@@ -112,7 +112,6 @@ export default function Planner() {
   const mondayOffset = (new Date(date + "T00:00:00Z").getUTCDay() + 6) % 7;
   const monday = addDays(date, -mondayOffset);
   const week = Array.from({ length: 7 }, (_, i) => addDays(monday, i));
-  const closest = data?.milestones[0];
   const daysUntil = (value: string) => Math.round((Date.parse(value) - Date.parse(date)) / 86_400_000);
   const badge = (value: string) => daysUntil(value) === 0 ? "D-DAY" : `D-${daysUntil(value)}`;
   const connectionPrompt = calendarName.trim() ? `daylight 사이트 ${typeof window !== "undefined" ? window.location.origin : ""}의 연결된 도구를 사용해줘. Google Calendar에서 내가 팀에 공유할 마일스톤용으로 지정하는 캘린더 ${JSON.stringify(calendarName.trim())}만 읽어서, 한국 시간 오늘부터 90일 뒤까지의 마일스톤을 daylight에 동기화해줘. 페이지가 여러 개면 끝까지 읽고 성공한 뒤에만 sync_google_calendar_milestones를 호출해. 이 캘린더 일정이 사이트의 모든 팀원에게 공유되는 것을 허용해. 일정의 원래 ID와 제목을 유지하고, 종일 일정은 start.date, 시간 일정은 한국 시간 시작 날짜를 사용해. Google 캘린더에는 아무것도 쓰지 마. 내가 직접 작성한 일일 할 일은 get_daily_plan으로 읽기만 하고 추가·수정·완료 처리하지 마. 자동 실행은 아직 설정하지 마.` : "";
@@ -171,8 +170,6 @@ export default function Planner() {
           </div>
           <aside className="right-column">
             <section className="card milestones-card"><div className="section-heading"><div className="section-title"><Flag size={16} /><h2>다가오는 마일스톤</h2></div><button className="icon-button" aria-label="전체 마일스톤 보기" onClick={() => setView("milestones")}><ArrowRight size={16} /></button></div><div className="source-label"><span className="google-calendar-icon">31</span>Google Calendar<span className={`source-state ${data.sources.length ? "connected" : ""}`}>{data.sources.length ? "가져온 일정" : "연결 전"}</span></div>{data.milestones.length ? data.milestones.slice(0, 4).map(item => milestoneItem(item)) : <div className="milestones-mini-empty"><div className="calendar-drawing"><span /><i /><i /><i /><i /><i /><i /><i /><i /><i /></div><p>{data.sources.length ? "예정된 마일스톤이 없어요" : "중요한 목표를 한눈에"}</p><span>{data.sources.length ? "마지막으로 가져온 일정 기준이에요." : "마감과 목표를 캘린더에서 가져와요."}</span>{!data.sources.length && <button className="text-button" onClick={() => setModal("connections")}>캘린더 연결하기<ArrowRight size={13} /></button>}</div>}<div className="milestone-card-footer"><RefreshCw size={11} /><span>{data.sources.length ? `최근 동기화 ${syncTime(data.sources[0].syncedAt)}` : "dots를 통해 동기화해요"}</span></div></section>
-            <section className="day-note"><span className="day-note-sun"><Sun size={30} strokeWidth={1.15} /></span><p>{closest ? <>다음 목표까지 <strong>{daysUntil(closest.date) === 0 ? "바로 오늘" : `${daysUntil(closest.date)}일`}.</strong><br />오늘의 작은 일부터.</> : <>많이 하는 하루보다,<br /><strong>하나라도 나아가는 하루.</strong></>}</p><span>MAKE ROOM FOR WHAT MATTERS</span></section>
-            <section className="how-card"><h3>우리의 하루를 쓰는 법</h3><div><span>01</span><p>아침에 오늘 할 일을 적어요.</p></div><div><span>02</span><p>마친 일은 체크하고 공유해요.</p></div><div><span>03</span><p>팀의 진전과 큰 목표를 살펴봐요.</p></div></section>
           </aside>
         </div>}
         <footer className="main-footer"><span>조금씩, 꾸준히, 함께.</span><span>daylight · Asia/Seoul</span></footer>
