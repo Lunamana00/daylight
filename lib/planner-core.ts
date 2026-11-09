@@ -1,19 +1,22 @@
 // Site-admitted members share reads; writes always use the authenticated owner.
 export type Identity = { userId: string; email: string; fullName?: string | null };
 export type Member = { id: string; name: string };
-export type Task = { id: string; ownerId: string; date: string; title: string; done: number; important: number; createdAt: string; updatedAt: string; ownerName: string };
+export type Subtask = { id: string; taskId: string; date: string; title: string; done: number };
+export type Task = { id: string; ownerId: string; date: string; endDate: string | null; title: string; done: number; important: number; createdAt: string; updatedAt: string; ownerName: string; subtasks: Subtask[] };
 export type Note = { ownerId: string; date: string; content: string; updatedAt: string; ownerName: string };
 export type Milestone = { ownerId: string; calendarId: string; eventId: string; title: string; date: string; url: string | null; ownerName: string; sourceName: string; syncedAt: string };
 export type Source = { ownerId: string; calendarId: string; name: string; syncedAt: string; ownerName: string };
-export type DayData = { date: string; me: Member; members: Member[]; tasks: Task[]; notes: Note[]; milestones: Milestone[]; sources: Source[] };
+export type DayData = { date: string; me: Member; members: Member[]; tasks: Task[]; notes: Note[]; milestones: Milestone[]; sources: Source[]; calendarSync?: Array<{ calendarId: string; enabled: boolean; canManage: boolean; error: string | null }> };
+export type CalendarData = { from: string; to: string; tasks: Task[]; milestones: Milestone[] };
 export const milestoneKey = (item: { calendarId: string; eventId: string }) => JSON.stringify([item.calendarId, item.eventId]);
 
 export class PlannerError extends Error {
   status: number;
   constructor(message: string, status = 400) { super(message); this.status = status; }
 }
-export function today() {
-  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+const seoulDay = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul", year: "numeric", month: "2-digit", day: "2-digit" });
+export function today(date = new Date()) {
+  return seoulDay.format(date);
 }
 export function day(value: unknown): string {
   if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value) || !Number.isFinite(Date.parse(value + "T00:00:00Z")) || new Date(value + "T00:00:00Z").toISOString().slice(0, 10) !== value || value < "2000-01-01" || value > "2100-12-31") throw new PlannerError("올바른 날짜를 선택해주세요.");
@@ -36,25 +39,97 @@ export async function ensureMember(db: D1Database, user: Identity) {
   await db.prepare("INSERT INTO members (id,name,email,joined_at) VALUES (?,?,?,?) ON CONFLICT(id) DO UPDATE SET email=excluded.email")
     .bind(user.userId, (user.fullName || user.email.split("@")[0]).slice(0, 40), user.email, new Date().toISOString()).run();
 }
-export async function listMilestones(db: D1Database, from: string, to: string) {
+async function readTasks(db: D1Database, from: string, to: string, ownerId: string | null = null): Promise<Task[]> {
+  const where = "t.date<=? AND COALESCE(t.end_date,t.date)>=? AND (? IS NULL OR t.owner_id=?)";
+  const [tasks, children] = await Promise.all([
+    db.prepare(`SELECT t.id,t.owner_id AS ownerId,t.date,t.end_date AS endDate,t.title,t.done,t.important,t.created_at AS createdAt,t.updated_at AS updatedAt,p.name AS ownerName FROM tasks t JOIN members p ON p.id=t.owner_id WHERE ${where} ORDER BY t.date,t.important DESC,t.created_at,t.id`).bind(to, from, ownerId, ownerId).all<Task>(),
+    db.prepare(`SELECT s.id,s.task_id AS taskId,s.date,s.title,s.done FROM task_subtasks s JOIN tasks t ON t.id=s.task_id WHERE ${where} ORDER BY s.date,s.created_at,s.id`).bind(to, from, ownerId, ownerId).all<Subtask>(),
+  ]);
+  const grouped = new Map<string, Subtask[]>();
+  for (const child of children.results) {
+    const list = grouped.get(child.taskId) ?? [];
+    list.push(child); grouped.set(child.taskId, list);
+  }
+  return tasks.results.map(task => {
+    const subtasks = grouped.get(task.id) ?? [];
+    return { ...task, subtasks, done: subtasks.length ? Number(subtasks.every(child => child.done)) : task.done };
+  }).sort((a, b) => a.done - b.done);
+}
+export function dailyTaskItems(tasks: Task[], date: string): Array<{ id: string; title: string; done: boolean; parentTitle: string | null; subtask: boolean }> {
+  return tasks.flatMap<{ id: string; title: string; done: boolean; parentTitle: string | null; subtask: boolean }>(task => task.subtasks.length
+    ? task.subtasks.filter(child => child.date === date).map(child => ({ id: child.id, title: child.title, done: Boolean(child.done), parentTitle: task.title, subtask: true }))
+    : task.date <= date && (task.endDate ?? task.date) >= date
+      ? [{ id: task.id, title: task.title, done: Boolean(task.done), parentTitle: null, subtask: false }]
+      : []
+  ).sort((a, b) => Number(a.done) - Number(b.done));
+}
+export function calendarTaskLanes(tasks: Task[], from: string, to: string): Task[][] {
+  const periods = tasks.filter(task => task.endDate && task.endDate > task.date && task.date <= to && task.endDate >= from)
+    .sort((a, b) => a.date.localeCompare(b.date) || b.endDate!.localeCompare(a.endDate!) || a.id.localeCompare(b.id));
+  const lanes: Task[][] = [];
+  for (const task of periods) {
+    const lane = lanes.find(items => items[items.length - 1].endDate! < task.date);
+    if (lane) lane.push(task);
+    else lanes.push([task]);
+  }
+  return lanes;
+}
+export function taskHue(id: string) {
+  let hash = 0;
+  for (const character of id) hash = (Math.imul(hash, 31) + character.charCodeAt(0)) >>> 0;
+  return [148, 218, 278, 28, 328, 178, 55, 245][hash % 8];
+}
+export function calendarTaskGroups(tasks: Task[], date: string) {
+  return tasks.map(task => ({ task, items: dailyTaskItems([task], date) }))
+    .filter(({ task, items }) => items.length > 0 && (task.subtasks.length > 0 || !task.endDate || task.endDate === task.date));
+}
+export function widgetPlan(data: DayData) {
+  const items = dailyTaskItems(data.tasks.filter(task => task.ownerId === data.me.id), data.date);
+  const next = data.milestones[0];
+  return {
+    date: data.date, accountID: data.me.id,
+    tasks: items.slice(0, 4), taskCount: items.length, completedCount: items.filter(task => task.done).length,
+    nextMilestone: next ? { title: next.title, date: next.date } : null,
+  };
+}
+export async function listMilestones(db: D1Database, from: string, to: string, ownerId?: string) {
   day(from); day(to);
   if (to < from || to > addDays(from, 366)) throw new PlannerError("마일스톤 조회 기간은 1년 이내로 선택해주세요.");
-  const result = await db.prepare("SELECT m.owner_id AS ownerId,m.calendar_id AS calendarId,m.event_id AS eventId,m.title,m.date,m.url,m.synced_at AS syncedAt,p.name AS ownerName,s.name AS sourceName FROM milestones m JOIN members p ON p.id=m.owner_id JOIN calendar_sources s ON s.calendar_id=m.calendar_id LEFT JOIN milestone_order o ON o.calendar_id=m.calendar_id AND o.event_id=m.event_id WHERE m.date>=? AND m.date<=? ORDER BY o.position IS NULL,o.position,m.date,m.title,m.calendar_id,m.event_id LIMIT 1000").bind(from, to).all<Milestone>();
+  const result = await db.prepare("SELECT m.owner_id AS ownerId,m.calendar_id AS calendarId,m.event_id AS eventId,m.title,m.date,m.url,m.synced_at AS syncedAt,p.name AS ownerName,s.name AS sourceName FROM milestones m JOIN members p ON p.id=m.owner_id JOIN calendar_sources s ON s.calendar_id=m.calendar_id AND (? IS NULL OR s.owner_id=m.owner_id) LEFT JOIN milestone_order o ON o.calendar_id=m.calendar_id AND o.event_id=m.event_id WHERE m.date>=? AND m.date<=? AND (? IS NULL OR m.owner_id=?) ORDER BY o.position IS NULL,o.position,m.date,m.title,m.calendar_id,m.event_id LIMIT 1000").bind(ownerId ?? null, from, to, ownerId ?? null, ownerId ?? null).all<Milestone>();
   return result.results;
 }
-export async function readDay(db: D1Database, user: Identity, date: string): Promise<DayData> {
+export async function readDay(db: D1Database, user: Identity, date: string, personalCalendars = false): Promise<DayData> {
   day(date);
   await ensureMember(db, user);
+  const calendarOwner = personalCalendars ? user.userId : null;
   const [people, tasks, notes, milestones, sources] = await Promise.all([
     db.prepare("SELECT id,name FROM members ORDER BY joined_at,id").all<Member>(),
-    db.prepare("SELECT t.id,t.owner_id AS ownerId,t.date,t.title,t.done,t.important,t.created_at AS createdAt,t.updated_at AS updatedAt,p.name AS ownerName FROM tasks t JOIN members p ON p.id=t.owner_id WHERE t.date=? ORDER BY t.done,t.important DESC,t.created_at,t.id").bind(date).all<Task>(),
-    db.prepare("SELECT n.owner_id AS ownerId,n.date,n.content,n.updated_at AS updatedAt,p.name AS ownerName FROM notes n JOIN members p ON p.id=n.owner_id WHERE n.date=?").bind(date).all<Note>(),
-    listMilestones(db, date, addDays(date, 90) > "2100-12-31" ? "2100-12-31" : addDays(date, 90)),
-    db.prepare("SELECT s.owner_id AS ownerId,s.calendar_id AS calendarId,s.name,s.synced_at AS syncedAt,p.name AS ownerName FROM calendar_sources s JOIN members p ON p.id=s.owner_id ORDER BY s.synced_at DESC").all<Source>(),
+    readTasks(db, date, date),
+    db.prepare("SELECT n.owner_id AS ownerId,n.date,n.content,n.updated_at AS updatedAt,p.name AS ownerName FROM notes n JOIN members p ON p.id=n.owner_id WHERE n.date=? AND (? IS NULL OR n.owner_id=?)").bind(date, calendarOwner, calendarOwner).all<Note>(),
+    listMilestones(db, date, addDays(date, 90) > "2100-12-31" ? "2100-12-31" : addDays(date, 90), calendarOwner ?? undefined),
+    db.prepare("SELECT s.owner_id AS ownerId,s.calendar_id AS calendarId,s.name,s.synced_at AS syncedAt,p.name AS ownerName FROM calendar_sources s JOIN members p ON p.id=s.owner_id WHERE (? IS NULL OR s.owner_id=?) ORDER BY s.synced_at DESC").bind(calendarOwner, calendarOwner).all<Source>(),
   ]);
-  return { date, me: people.results.find(p => p.id === user.userId)!, members: people.results, tasks: tasks.results, notes: notes.results, milestones, sources: sources.results };
+  return { date, me: people.results.find(p => p.id === user.userId)!, members: people.results, tasks, notes: notes.results, milestones, sources: sources.results };
 }
-export async function change(db: D1Database, user: Identity, input: Record<string, unknown>) {
+export function monthRange(date: string) {
+  day(date);
+  return { from: date.slice(0, 7) + "-01", to: new Date(Date.UTC(Number(date.slice(0, 4)), Number(date.slice(5, 7)), 0)).toISOString().slice(0, 10) };
+}
+export function weekRange(date: string) {
+  day(date);
+  const offset = (new Date(date + "T00:00:00Z").getUTCDay() + 6) % 7;
+  const from = addDays(date, -offset), to = addDays(date, 6 - offset);
+  return { from: from < "2000-01-01" ? "2000-01-01" : from, to: to > "2100-12-31" ? "2100-12-31" : to };
+}
+export async function readCalendar(db: D1Database, user: Identity, date: string, view: "week" | "month" = "month"): Promise<CalendarData> {
+  const { from, to } = view === "week" ? weekRange(date) : monthRange(date);
+  const [tasks, milestones] = await Promise.all([
+    readTasks(db, from, to, user.userId),
+    listMilestones(db, from, to, user.userId),
+  ]);
+  return { from, to, tasks, milestones };
+}
+export async function change(db: D1Database, user: Identity, input: Record<string, unknown>, taskDate?: string) {
   await ensureMember(db, user);
   const now = new Date().toISOString();
   if (input.op === "milestones.reorder") {
@@ -74,7 +149,38 @@ export async function change(db: D1Database, user: Identity, input: Record<strin
   }
   if (input.op === "task.add") {
     const id = crypto.randomUUID();
-    await db.prepare("INSERT INTO tasks (id,owner_id,date,title,done,important,created_at,updated_at) VALUES (?,?,?,?,0,?,?,?)").bind(id, user.userId, day(input.date), text(input.title, "할 일", 240), input.important === undefined ? 0 : bool(input.important), now, now).run();
+    const date = day(input.date), endDate = input.endDate == null ? null : day(input.endDate);
+    if (endDate && endDate < date) throw new PlannerError("종료일은 시작일 이후로 선택해주세요.");
+    await db.prepare("INSERT INTO tasks (id,owner_id,date,end_date,title,done,important,created_at,updated_at) VALUES (?,?,?,?,?,0,?,?,?)").bind(id, user.userId, date, endDate, text(input.title, "할 일", 240), input.important === undefined ? 0 : bool(input.important), now, now).run();
+    return { id };
+  }
+  if (input.op === "subtask.add" || input.op === "subtask.patch" || input.op === "subtask.delete") {
+    const adding = input.op === "subtask.add";
+    const id = adding ? crypto.randomUUID() : text(input.id, "하위 할 일 ID", 100);
+    const taskId = adding ? text(input.taskId, "할 일 ID", 100) : null;
+    const parent = await db.prepare(`SELECT t.id,t.date,t.end_date AS endDate,s.date AS childDate FROM tasks t LEFT JOIN task_subtasks s ON s.task_id=t.id AND s.id=? WHERE t.owner_id=? AND ${adding ? "t.id=?" : "s.id=?"}`).bind(id, user.userId, taskId ?? id).all<{ id: string; date: string; endDate: string | null; childDate: string | null }>();
+    const task = parent.results[0];
+    if (!task) throw new PlannerError("본인의 하위 할 일만 변경할 수 있어요.", 403);
+    if (taskDate !== undefined && task.childDate !== taskDate) throw new PlannerError("위젯을 새로고침해 주세요.", 409);
+    if (input.op === "subtask.delete") {
+      await db.prepare("DELETE FROM task_subtasks WHERE id=? AND task_id IN (SELECT id FROM tasks WHERE owner_id=?)").bind(id, user.userId).run();
+      return { id };
+    }
+    const date = day(input.date ?? task.childDate);
+    if (date < task.date || date > (task.endDate ?? task.date)) throw new PlannerError("하위 할 일의 날짜는 전체 할 일 기간 안에서 선택해주세요.");
+    let result;
+    if (adding) {
+      result = await db.prepare("INSERT INTO task_subtasks (id,task_id,date,title,done,created_at,updated_at) SELECT ?,id,?,?,0,?,? FROM tasks WHERE id=? AND owner_id=? AND ? BETWEEN date AND COALESCE(end_date,date)").bind(id, date, text(input.title, "하위 할 일", 240), now, now, task.id, user.userId, date).run();
+    } else {
+      const fields = ["updated_at=?"];
+      const values: (string | number)[] = [now];
+      if (input.date !== undefined) { fields.push("date=?"); values.push(date); }
+      if (input.title !== undefined) { fields.push("title=?"); values.push(text(input.title, "하위 할 일", 240)); }
+      if (input.done !== undefined) { fields.push("done=?"); values.push(bool(input.done)); }
+      if (fields.length === 1) throw new PlannerError("변경할 내용을 입력해주세요.");
+      result = await db.prepare(`UPDATE task_subtasks SET ${fields.join(",")} WHERE id=? AND (? IS NULL OR date=?) AND task_id IN (SELECT id FROM tasks WHERE owner_id=? AND ? BETWEEN date AND COALESCE(end_date,date))`).bind(...values, id, taskDate ?? null, taskDate ?? null, user.userId, date).run();
+    }
+    if (!result.meta.changes) throw new PlannerError("할 일 기간이 바뀌었어요. 새로고침 후 다시 시도해주세요.", 409);
     return { id };
   }
   if (input.op === "task.patch" || input.op === "task.delete") {
@@ -85,14 +191,20 @@ export async function change(db: D1Database, user: Identity, input: Record<strin
       return { id };
     }
     const fields: string[] = [];
-    const values: (string | number)[] = [];
+    const values: (string | number | null)[] = [];
+    const current = (await db.prepare("SELECT date,end_date AS endDate FROM tasks WHERE id=? AND owner_id=?").bind(id, user.userId).all<{ date: string; endDate: string | null }>()).results[0];
+    if (!current) throw new PlannerError("본인의 할 일만 수정할 수 있어요.", 403);
+    const start = input.date === undefined ? current.date : day(input.date);
+    const end = input.endDate === undefined ? current.endDate : input.endDate === null ? null : day(input.endDate);
+    if (end && end < start) throw new PlannerError("종료일은 시작일 이후로 선택해주세요.");
     if (input.title !== undefined) { fields.push("title=?"); values.push(text(input.title, "할 일", 240)); }
     if (input.date !== undefined) { fields.push("date=?"); values.push(day(input.date)); }
+    if (input.endDate !== undefined) { fields.push("end_date=?"); values.push(end); }
     if (input.done !== undefined) { fields.push("done=?"); values.push(bool(input.done)); }
     if (input.important !== undefined) { fields.push("important=?"); values.push(bool(input.important)); }
     if (!fields.length) throw new PlannerError("변경할 내용을 입력해주세요.");
-    const result = await db.prepare(`UPDATE tasks SET ${fields.join(",")},updated_at=? WHERE id=? AND owner_id=?`).bind(...values, now, id, user.userId).run();
-    if (!result.meta.changes) throw new PlannerError("본인의 할 일만 수정할 수 있어요. 이미 삭제되었을 수도 있습니다.", 403);
+    const result = await db.prepare(`UPDATE tasks SET ${fields.join(",")},updated_at=? WHERE id=? AND owner_id=? AND (? IS NULL OR ? BETWEEN date AND COALESCE(end_date,date)) AND NOT EXISTS (SELECT 1 FROM task_subtasks WHERE task_id=tasks.id AND (date<? OR date>? OR ?))`).bind(...values, now, id, user.userId, taskDate ?? null, taskDate ?? null, start, end ?? start, input.done !== undefined ? 1 : 0).run();
+    if (!result.meta.changes) throw new PlannerError("하위 할 일의 날짜를 포함하는 기간을 선택하고, 완료는 하위 할 일별로 체크해주세요.", 409);
     return { id };
   }
   if (input.op === "note.save") {
@@ -105,7 +217,7 @@ export async function change(db: D1Database, user: Identity, input: Record<strin
   }
   throw new PlannerError("지원하지 않는 요청입니다.");
 }
-export async function syncMilestones(db: D1Database, user: Identity, input: Record<string, unknown>) {
+export async function syncMilestones(db: D1Database, user: Identity, input: Record<string, unknown>, personalCalendar = false) {
   const calendarId = text(input.calendarId, "캘린더 ID", 300);
   const name = text(input.name, "캘린더 이름", 120);
   const from = day(input.from), to = day(input.to);
@@ -130,9 +242,9 @@ export async function syncMilestones(db: D1Database, user: Identity, input: Reco
   const now = new Date().toISOString();
   // D1 batch is atomic: failed insertion never erases the previous snapshot.
   await db.batch([
-    db.prepare("INSERT INTO calendar_sources (owner_id,calendar_id,name,synced_at) VALUES (?,?,?,?) ON CONFLICT(calendar_id) DO UPDATE SET owner_id=excluded.owner_id,name=excluded.name,synced_at=excluded.synced_at").bind(user.userId, calendarId, name, now),
-    db.prepare("DELETE FROM milestones WHERE calendar_id=? AND date>=? AND date<=?").bind(calendarId, from, to),
-    ...events.map(event => db.prepare("INSERT INTO milestones (owner_id,calendar_id,event_id,title,date,url,synced_at) VALUES (?,?,?,?,?,?,?) ON CONFLICT(calendar_id,event_id) DO UPDATE SET owner_id=excluded.owner_id,title=excluded.title,date=excluded.date,url=excluded.url,synced_at=excluded.synced_at").bind(user.userId, calendarId, event.eventId, event.title, event.date, event.url, now)),
+    db.prepare("INSERT INTO calendar_sources (owner_id,calendar_id,name,synced_at) VALUES (?,?,?,?) ON CONFLICT DO UPDATE SET owner_id=excluded.owner_id,name=excluded.name,synced_at=excluded.synced_at").bind(user.userId, calendarId, name, now),
+    db.prepare("DELETE FROM milestones WHERE calendar_id=? AND date>=? AND date<=? AND (? IS NULL OR owner_id=?)").bind(calendarId, from, to, personalCalendar ? user.userId : null, personalCalendar ? user.userId : null),
+    ...events.map(event => db.prepare("INSERT INTO milestones (owner_id,calendar_id,event_id,title,date,url,synced_at) VALUES (?,?,?,?,?,?,?) ON CONFLICT DO UPDATE SET owner_id=excluded.owner_id,title=excluded.title,date=excluded.date,url=excluded.url,synced_at=excluded.synced_at").bind(user.userId, calendarId, event.eventId, event.title, event.date, event.url, now)),
   ]);
   return { count: events.length, from, to, syncedAt: now, message: "팀 공통 마일스톤을 갱신했습니다. 일일 할 일은 변경하지 않았습니다." };
 }

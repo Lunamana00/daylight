@@ -1,31 +1,35 @@
 # daylight
 
-한국 시간에 맞춰 아침에 직접 계획을 정리하고, 팀의 진행 상황과 Google Calendar 마일스톤을 함께 보는 작은 웹앱입니다.
+Set your own daily tasks. See what other people plan and complete.
 
-- **나의 하루**: 날짜별 할 일, 완료, 중요 표시, 수정·삭제, 다음 날로 이동.
-- **함께하는 오늘**: 참여자별 할 일과 완료 상황, 사람별 보기. 남의 할 일은 서버에서도 수정할 수 없습니다.
-- **마일스톤**: 일일 할 일과 별도로 관리하는 팀 공통 목표. 동일한 Google 캘린더는 여러 사람이 동기화해도 중복되지 않습니다. 손잡이를 드래그하거나 키보드 위아래 방향키로 순서를 바꿀 수 있고, 팀 공통 순서는 새로고침과 캘린더 재동기화 후에도 유지됩니다.
-- **접근**: Sites의 초대 계정 제한과 Sign in with ChatGPT. 데이터는 브라우저가 아닌 D1에 저장합니다. 허용된 모든 계정이 같은 팀 공간을 읽습니다.
+- **서로의 오늘** shows each person's tasks and completion state.
+- **내 할 일** shows your tasks first and the weekly calendar below them. Add, edit, complete, delete, or move your own tasks to the next day. Select a date in the calendar to show that day's tasks. Other people cannot change your tasks.
+- Select **여러 날** to set a start date and an end date. Add dated subtasks under the task. The task appears on each date in its period. Complete each subtask to update total progress.
+- The calendar opens in **주간** view. It shows task periods above the dated tasks and subtasks. Use the checkboxes to complete them. Select **월간** for a month overview. The calendar shows your Google events and daily tasks. Only your account can read your calendar events. They do not become daily tasks.
+- Google sign-in permits invited accounts only. The Mac widget uses the same account and server.
 
-## Google Calendar와 OpenAI dots
+## Google Calendar and the Mac widget
 
-이 버전은 dots를 통한 캘린더 동기화입니다. 웹이 Google 계정에 직접 OAuth 로그인하거나 Google API를 호출하지 않습니다. dots에 연결된 Google Calendar가 실제 일정을 읽고, daylight의 연결된 도구가 명시적으로 선택한 팀용 캘린더의 마일스톤만 저장합니다. 앱의 `연결 및 내 프로필` 화면에서 대상 캘린더를 지정하면 전달할 요청을 복사할 수 있습니다.
+Select one or more calendars in **설정**. The server reads the selected calendars every five minutes. Use **지금 동기화** or the refresh button in the Mac widget to request an update. Failed imports keep the last saved events. Task records and saved event order remain unchanged.
 
-사이트 게시 시 생성되는 daylight 플러그인을 설치·연결하고 dots에 Google Calendar 접근 권한을 부여해야 합니다. 가져온 일정은 사이트의 모든 초대 멤버에게 보이므로 공유할 캘린더를 직접 선택해야 합니다. 일정 화면은 마지막 동기화 기록이며 실시간 Google 조회가 아닙니다. 실제 가져오기 전에는 연결 전 상태를 표시합니다. 자동 실행이나 아침 알림은 설정하지 않습니다.
+The Mac widget shows today’s tasks, including subtasks scheduled for today. The header shows the full completion count. Use **Edit Widget** to show or hide Google Calendar events.
 
-제공 도구는 `get_daily_plan`, `list_milestones`, `sync_google_calendar_milestones`입니다. 일일 할 일이나 메모를 변경하는 도구는 제공하지 않습니다. 동기화는 전체 조회가 성공한 후에만 수행해야 하며, 실패·부분 조회로 기존 데이터를 덮어쓰면 안 됩니다. 원본 Google 캘린더에는 쓰지 않습니다. 같은 캘린더의 지정 기간을 교체하되 다른 기간과 다른 캘린더는 보존합니다.
+See [deployment instructions](deploy/README.md) for Google login, database setup, and Mac installation.
 
-## 실행과 검증
+## Original Sites deployment
 
-Node.js 24 이상을 권장합니다. Sites 실행·배포 설정은 `.openai/hosting.json`에 있습니다.
+The original Sites deployment uses Sign in with ChatGPT and dots. Its database and access settings remain separate from the Google deployment. Keep its project ID and configuration in `.openai/hosting.json`. Do not apply the Google database changes to the Sites database.
+
+The original MCP tools are `get_daily_plan`, `list_milestones`, and `sync_google_calendar_milestones`. They cannot change daily tasks. Calendar imports require a complete successful read of the selected calendar. They do not write to Google Calendar.
+
+## Local development
+
+Use Node.js 24 or later. Keep the lock file and install dependencies with `npm ci`.
 
 ```sh
 npm run dev -- --hostname 127.0.0.1 --port 5173
-node scripts/check-planner.mjs
-node node_modules/typescript/bin/tsc --noEmit
-npm run build
 ```
 
-로컬 데이터베이스는 빌드 후 생성되는 `dist/server/wrangler.json`으로 `drizzle/`의 마이그레이션을 순서대로 한 번씩 적용합니다. Sites는 게시할 때 운영 마이그레이션을 적용합니다. 운영 데이터와 로컬 미리보기 데이터는 분리됩니다. 로컬 로그인은 스타터가 제공하는 테스트 계정을 사용하며, 테스트 계정과 예시 할 일은 운영으로 보내지 않습니다.
+Apply the SQL files in `drizzle/` once, in order, to the local database. The generated local database configuration is `dist/server/wrangler.json`. Local records are separate from production records.
 
-`check-planner.mjs`는 임시 SQLite에서 두 사용자 사이의 읽기·수정 권한, 날짜 이동, 달력/할 일 분리, 공통 캘린더 중복 방지와 동기화 범위를 검증합니다.
+Build the deployment with `npm run build`. Planner checks are in `scripts/check-planner.mjs`. Calendar access and sync checks are in `scripts/check-calendar-sync.mjs`.

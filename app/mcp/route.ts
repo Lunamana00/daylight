@@ -1,5 +1,5 @@
 import { env } from "cloudflare:workers";
-import { getChatGPTUser } from "../chatgpt-auth";
+import { getDaylightSession } from "../identity";
 import { day, listMilestones, PlannerError, readDay, syncMilestones, today } from "../../lib/planner-core";
 
 export const dynamic = "force-dynamic";
@@ -11,12 +11,14 @@ const tools = [
 ];
 export async function POST(request: Request) {
   const headers = { "Cache-Control": "private, no-store" };
+  const calendarSync = env.DAYLIGHT_AUTH_MODE !== "google";
   let id: unknown = null;
   try {
     const origin = request.headers.get("origin");
-    if (origin && origin !== new URL(request.url).origin) return Response.json({ error: "Cross-origin requests are not allowed" }, { status: 403, headers });
-    const user = await getChatGPTUser();
-    if (!user) return Response.json({ error: "Authentication required" }, { status: 401, headers });
+    if ((origin || env.DAYLIGHT_AUTH_MODE === "google") && origin !== new URL(request.url).origin) return Response.json({ error: "Cross-origin requests are not allowed" }, { status: 403, headers });
+    const session = await getDaylightSession(request.headers);
+    if (!session) return Response.json({ error: "Authentication required" }, { status: 401, headers });
+    const { user } = session;
     const raw = await request.text();
     if (raw.length > 512_000) return Response.json({ error: "Request too large" }, { status: 413, headers });
     let rpc;
@@ -28,15 +30,15 @@ export async function POST(request: Request) {
     if (rpc.method === "server/discover") result = { supportedVersions: ["2026-07-28"], capabilities: { tools: {} }, serverInfo: { name: "daylight", version: "1.0.0" } };
     else if (rpc.method === "initialize") result = { protocolVersion: "2025-03-26", capabilities: { tools: {} }, serverInfo: { name: "daylight", version: "1.0.0" } };
     else if (rpc.method === "ping") result = {};
-    else if (rpc.method === "tools/list") result = { tools };
+    else if (rpc.method === "tools/list") result = { tools: calendarSync ? tools : tools.filter(tool => tool.name !== "sync_google_calendar_milestones").map(tool => ({ ...tool, description: tool.name === "get_daily_plan" ? "Read each person's daily tasks and completion state, plus the signed-in person's private calendar events. Calendar events are separate from daily tasks." : "Read only the signed-in person's saved Google Calendar events. syncedAt shows when these events were last imported." })) };
     else if (rpc.method === "tools/call") {
       const args = rpc.params?.arguments ?? {};
       if (!args || typeof args !== "object" || Array.isArray(args)) throw new PlannerError("Invalid arguments");
       if (!env.DB) throw new Error("Missing DB");
       let value;
-      if (rpc.params?.name === "get_daily_plan") value = await readDay(env.DB, user, day(args.date ?? today()));
-      else if (rpc.params?.name === "list_milestones") value = await listMilestones(env.DB, day(args.from), day(args.to));
-      else if (rpc.params?.name === "sync_google_calendar_milestones") value = await syncMilestones(env.DB, user, args);
+      if (rpc.params?.name === "get_daily_plan") value = await readDay(env.DB, user, day(args.date ?? today()), !calendarSync);
+      else if (rpc.params?.name === "list_milestones") value = await listMilestones(env.DB, day(args.from), day(args.to), calendarSync ? undefined : user.userId);
+      else if (calendarSync && rpc.params?.name === "sync_google_calendar_milestones") value = await syncMilestones(env.DB, user, args);
       else return Response.json({ jsonrpc: "2.0", id, error: { code: -32602, message: "Unknown tool" } }, { headers });
       result = { content: [{ type: "text", text: JSON.stringify(value) }] };
     } else return Response.json({ jsonrpc: "2.0", id, error: { code: -32601, message: "Method not found" } }, { headers });

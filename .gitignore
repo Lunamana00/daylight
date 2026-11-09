@@ -43,3 +43,5 @@ yarn-error.log*
 
 # OS metadata
 .DS_Store
+/deploy/wrangler.google.jsonc
+/macos/**/xcuserdata/

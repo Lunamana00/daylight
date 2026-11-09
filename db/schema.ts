@@ -10,12 +10,22 @@ export const tasks = sqliteTable("tasks", {
   id: text("id").primaryKey(),
   ownerId: text("owner_id").notNull().references(() => members.id),
   date: text("date").notNull(),
+  endDate: text("end_date"),
   title: text("title").notNull(),
   done: integer("done").notNull().default(0),
   important: integer("important").notNull().default(0),
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
 }, table => [index("tasks_day_owner").on(table.date, table.ownerId)]);
+export const taskSubtasks = sqliteTable("task_subtasks", {
+  id: text("id").primaryKey(),
+  taskId: text("task_id").notNull().references(() => tasks.id, { onDelete: "cascade" }),
+  date: text("date").notNull(),
+  title: text("title").notNull(),
+  done: integer("done").notNull().default(0),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, table => [index("subtasks_parent_date").on(table.taskId, table.date)]);
 export const notes = sqliteTable("notes", {
   ownerId: text("owner_id").notNull().references(() => members.id),
   date: text("date").notNull(),
