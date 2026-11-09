@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { PointerEvent as ReactPointerEvent, KeyboardEvent as ReactKeyboardEvent } from "react";
-import { ArrowRight, CalendarDays, Check, CheckCheck, ChevronLeft, ChevronRight, Copy, ExternalLink, Flag, GripVertical, Link2, LoaderCircle, LockKeyhole, MoreHorizontal, Pencil, RefreshCw, Settings2, Share2, Star, Sunrise, Trash2, Users, X } from "lucide-react";
+import { ArrowRight, CalendarDays, Check, CheckCheck, ChevronLeft, ChevronRight, Copy, ExternalLink, Flag, GripVertical, Link2, LoaderCircle, LockKeyhole, MoreHorizontal, Pencil, RefreshCw, Settings2, Share2, Star, Sun, Sunrise, Trash2, Users, X } from "lucide-react";
 import { addDays, milestoneKey, today } from "../lib/planner-core";
 import type { DayData, Milestone, Task } from "../lib/planner-core";
 
@@ -205,6 +205,10 @@ export default function Planner() {
 
   return <div className="app-shell">
     <aside className="sidebar">
+      <button className="sidebar-brand" aria-label="daylight 오늘로" onClick={() => { setView("mine"); selectDate(today()); }}>
+        <Sun size={23} strokeWidth={1.65} aria-hidden="true" />
+        <span>daylight<span className="sidebar-brand-dot">.</span></span>
+      </button>
       <nav aria-label="주 메뉴">
         <button aria-current={view === "mine" ? "page" : undefined} onClick={() => setView("mine")}><Sunrise size={18} />내 할 일</button>
         <button aria-current={view === "team" ? "page" : undefined} onClick={() => { setView("team"); setPerson("all"); }}><Users size={18} />팀 할 일</button>
