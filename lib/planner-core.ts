@@ -42,8 +42,8 @@ export async function ensureMember(db: D1Database, user: Identity) {
 async function readTasks(db: D1Database, from: string, to: string, ownerId: string | null = null): Promise<Task[]> {
   const where = "t.date<=? AND COALESCE(t.end_date,t.date)>=? AND (? IS NULL OR t.owner_id=?)";
   const [tasks, children] = await Promise.all([
-    db.prepare(`SELECT t.id,t.owner_id AS ownerId,t.date,t.end_date AS endDate,t.title,t.done,t.important,t.created_at AS createdAt,t.updated_at AS updatedAt,p.name AS ownerName FROM tasks t JOIN members p ON p.id=t.owner_id WHERE ${where} ORDER BY t.date,t.important DESC,t.created_at,t.id`).bind(to, from, ownerId, ownerId).all<Task>(),
-    db.prepare(`SELECT s.id,s.task_id AS taskId,s.date,s.title,s.done FROM task_subtasks s JOIN tasks t ON t.id=s.task_id WHERE ${where} ORDER BY s.date,s.created_at,s.id`).bind(to, from, ownerId, ownerId).all<Subtask>(),
+    db.prepare(`SELECT t.id,t.owner_id AS ownerId,t.date,t.end_date AS endDate,t.title,t.done,t.important,t.created_at AS createdAt,t.updated_at AS updatedAt,p.name AS ownerName FROM tasks t JOIN members p ON p.id=t.owner_id WHERE ${where} ORDER BY t.created_at,t.rowid`).bind(to, from, ownerId, ownerId).all<Task>(),
+    db.prepare(`SELECT s.id,s.task_id AS taskId,s.date,s.title,s.done FROM task_subtasks s JOIN tasks t ON t.id=s.task_id WHERE ${where} ORDER BY s.date,s.created_at,s.rowid`).bind(to, from, ownerId, ownerId).all<Subtask>(),
   ]);
   const grouped = new Map<string, Subtask[]>();
   for (const child of children.results) {
@@ -53,7 +53,7 @@ async function readTasks(db: D1Database, from: string, to: string, ownerId: stri
   return tasks.results.map(task => {
     const subtasks = grouped.get(task.id) ?? [];
     return { ...task, subtasks, done: subtasks.length ? Number(subtasks.every(child => child.done)) : task.done };
-  }).sort((a, b) => a.done - b.done);
+  });
 }
 export function dailyTaskItems(tasks: Task[], date: string): Array<{ id: string; title: string; done: boolean; parentTitle: string | null; subtask: boolean }> {
   return tasks.flatMap<{ id: string; title: string; done: boolean; parentTitle: string | null; subtask: boolean }>(task => task.subtasks.length
@@ -61,7 +61,7 @@ export function dailyTaskItems(tasks: Task[], date: string): Array<{ id: string;
     : task.date <= date && (task.endDate ?? task.date) >= date
       ? [{ id: task.id, title: task.title, done: Boolean(task.done), parentTitle: null, subtask: false }]
       : []
-  ).sort((a, b) => Number(a.done) - Number(b.done));
+  );
 }
 export function calendarTaskLanes(tasks: Task[], from: string, to: string): Task[][] {
   const periods = tasks.filter(task => task.endDate && task.endDate > task.date && task.date <= to && task.endDate >= from)

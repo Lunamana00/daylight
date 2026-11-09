@@ -40,8 +40,6 @@ export function PlannerCalendar({ date, data, busy, onSelectDate, onManage, onCh
   const selectedEvents = current?.milestones.filter(item => item.date === date) ?? [];
   const offset = (new Date(date + "T00:00:00Z").getUTCDay() + 6) % 7;
   const week = Array.from({ length: 7 }, (_, i) => addDays(date, i - offset));
-  const weekFamilies = (current?.tasks ?? []).filter(task => task.subtasks.length > 0 || (task.endDate && task.endDate > task.date));
-  const singleTasks = (current?.tasks ?? []).filter(task => !task.subtasks.length && (!task.endDate || task.endDate === task.date));
 
   return <section className="card planner-calendar-card" aria-label="내 일정 달력" aria-busy={loading}>
     <div className="calendar-toolbar">
@@ -57,7 +55,18 @@ export function PlannerCalendar({ date, data, busy, onSelectDate, onManage, onCh
       </div>
       <div className="planner-week-scroll"><div className="planner-week-board">
         <div className="calendar-week-dates">{week.map((key, index) => <button key={key} className={`${key === date ? "selected" : ""} ${key === today() ? "actual-today" : ""}`} aria-pressed={key === date} aria-label={dateLabel(key)} disabled={busy || key < "2000-01-01" || key > "2100-09-01"} onClick={() => onSelectDate(key)}><span>{["월", "화", "수", "목", "금", "토", "일"][index]}</span><strong>{Number(key.slice(5, 7))}.{Number(key.slice(8))}</strong></button>)}</div>
-        {weekFamilies.map(task => {
+        {(current?.tasks ?? []).map(task => {
+          if (!task.subtasks.length && (!task.endDate || task.endDate === task.date)) {
+            const column = (Date.parse(task.date) - Date.parse(week[0])) / 86_400_000 + 1;
+            return <section className="calendar-week-task-row" key={task.id} aria-label={task.title}>
+              <div className="calendar-task-group task-color" style={{ "--task-hue": taskHue(task.id), gridColumn: column } as CSSProperties}>
+                <label className={`calendar-week-task ${task.done ? "is-complete" : ""}`}>
+                  <input type="checkbox" checked={Boolean(task.done)} disabled={busy || loading} aria-label={`${task.title} ${task.done ? "완료 취소" : "완료"}`} onChange={() => void onChange({ op: "task.patch", id: task.id, done: !task.done })} />
+                  <span className="week-task-title">{task.title}</span>
+                </label>
+              </div>
+            </section>;
+          }
           const taskEnd = task.endDate ?? task.date;
           const start = task.date < from ? from : task.date;
           const end = taskEnd > to ? to : taskEnd;
@@ -82,17 +91,8 @@ export function PlannerCalendar({ date, data, busy, onSelectDate, onManage, onCh
           </section>;
         })}
         <div className="calendar-week-columns">{week.map(key => {
-          const groups = calendarTaskGroups(singleTasks, key);
           const events = current?.milestones.filter(item => item.date === key) ?? [];
           return <section key={key} className={`calendar-week-column ${key === date ? "selected" : ""}`} aria-label={dateLabel(key)}>
-            {groups.map(({ task, items }) => <div className="calendar-task-group task-color" key={task.id} style={{ "--task-hue": taskHue(task.id) } as CSSProperties} role="group" aria-label={task.title}>
-              <ul className="calendar-group-items">{items.map(item => <li key={item.id}>
-                <label className={`calendar-week-task ${item.done ? "is-complete" : ""}`}>
-                  <input type="checkbox" checked={item.done} disabled={busy || loading} aria-label={`${item.title} ${item.done ? "완료 취소" : "완료"}`} onChange={() => void onChange({ op: "task.patch", id: item.id, done: !item.done })} />
-                  <span className="week-task-title">{item.title}</span>
-                </label>
-              </li>)}</ul>
-            </div>)}
             {events.length > 0 && <div className="calendar-week-events">{events.map(item => <div className="calendar-week-event" key={milestoneKey(item)}><CalendarDays size={12} /><div>{item.url ? <a href={item.url} target="_blank" rel="noreferrer">{item.title}</a> : <span>{item.title}</span>}<small>{item.sourceName}</small></div></div>)}</div>}
           </section>;
         })}</div>

@@ -117,12 +117,15 @@ await change(db, alice, { op: 'subtask.patch', id: first.id, done: true }, '2030
 assert.equal((await readDay(db, alice, '2030-02-01')).tasks[0].done, 0);
 await change(db, alice, { op: 'subtask.patch', id: second.id, done: true }, '2030-02-01');
 assert.equal((await readDay(db, alice, '2030-02-01')).tasks[0].done, 1, 'All subtasks complete the parent');
-for (let i = 0; i < 5; i++) await change(db, alice, { op: 'task.add', date: '2030-02-01', title: `Daily ${i}` });
+for (let i = 0; i < 5; i++) {
+  const daily = await change(db, alice, { op: 'task.add', date: '2030-02-01', title: `Daily ${i}` });
+  if (i === 4) await change(db, alice, { op: 'task.patch', id: daily.id, done: true });
+}
 await change(db, bob, { op: 'task.add', date: '2030-02-01', title: 'Another person' });
 const widget = widgetPlan(await readDay(db, alice, '2030-02-01'));
 assert.equal(widget.tasks.length, 4);
 assert.equal(widget.taskCount, 7, 'Widget total includes items outside the four visible rows');
-assert.equal(widget.completedCount, 2, 'Completed count includes hidden rows and excludes other people');
+assert.equal(widget.completedCount, 3, 'Completed count includes hidden rows and excludes other people');
 await change(db, alice, { op: 'subtask.delete', id: first.id });
 assert.equal((await readDay(db, alice, '2030-01-31')).tasks.find(task => task.id === project.id).subtasks.length, 1);
 await change(db, alice, { op: 'task.delete', id: project.id });
@@ -171,4 +174,20 @@ assert.equal(calendarTaskGroups(sameTitleTasks, '2026-12-02').length, 0, 'Groups
 assert.equal(taskHue(families[0].task.id), taskHue({ ...sameTitleTasks[0], title: 'Renamed' }.id), 'Task colors survive title changes');
 assert.notEqual(taskHue('group-a'), taskHue('group-b'));
 console.log('PASS: parent-based calendar groups, scheduled children and stable task colors.');
+const orderedDate = '2040-06-04';
+const orderOne = await change(db, alice, { op: 'task.add', date: orderedDate, title: 'First single task' });
+const orderTwo = await change(db, alice, { op: 'task.add', date: orderedDate, title: 'Second single task' });
+const orderThree = await change(db, alice, { op: 'task.add', date: orderedDate, endDate: '2040-06-10', title: 'Third task with children' });
+const orderChild = await change(db, alice, { op: 'subtask.add', taskId: orderThree.id, date: orderedDate, title: 'Third task child' });
+const expectedOrder = [orderOne.id, orderTwo.id, orderThree.id];
+assert.deepEqual((await readDay(db, alice, orderedDate)).tasks.map(task => task.id), expectedOrder);
+await change(db, alice, { op: 'task.patch', id: orderOne.id, done: true });
+await change(db, alice, { op: 'task.patch', id: orderTwo.id, important: true });
+await change(db, alice, { op: 'subtask.patch', id: orderChild.id, done: true });
+assert.deepEqual((await readDay(db, alice, orderedDate)).tasks.map(task => task.id), expectedOrder, 'Completion and importance do not move the third task');
+assert.deepEqual((await readCalendar(db, alice, orderedDate, 'week')).tasks.map(task => task.id), expectedOrder, 'Weekly calendar uses the same order for single and multi-day tasks');
+await change(db, alice, { op: 'task.patch', id: orderTwo.id, date: '2040-06-05' });
+assert.deepEqual((await readCalendar(db, alice, '2040-06-05', 'week')).tasks.map(task => task.id), expectedOrder, 'A change of day keeps each task in its week row');
+assert.deepEqual(dailyTaskItems(sameTitleTasks, '2026-12-01').map(item => item.id), ['a1', 'a2', 'b1'], 'Completed children keep their place');
+console.log('PASS: fixed task order across completion, importance, date changes and weekly refreshes.');
 sqlite.close();

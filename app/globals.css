@@ -170,9 +170,9 @@
 .calendar-week-event a:hover{text-decoration:underline}
 @media(max-width:700px){.calendar-toolbar{flex-wrap:wrap}.calendar-view-controls{gap:10px;margin-left:auto}.calendar-week-heading h3{font-size:13px}}
 
-.task-color{--task-accent:hsl(var(--task-hue) 38% 43%);--task-ink:hsl(var(--task-hue) 32% 29%);--task-tint:hsl(var(--task-hue) 42% 96%);--task-border:hsl(var(--task-hue) 32% 82%);--task-band:hsl(var(--task-hue) 40% 89%)}
+.task-color{--task-accent:hsl(var(--task-hue) 38% 43%);--task-ink:hsl(var(--task-hue) 32% 29%);--task-border:hsl(var(--task-hue) 32% 82%);--task-band:hsl(var(--task-hue) 40% 89%)}
 .task-item,.task-item:last-child{margin:10px 0;padding:2px 12px 9px;border:1px solid var(--task-border);border-left:3px solid var(--task-accent);border-radius:9px;background:#fff}
-.task-item.task-family{background:var(--task-tint)}
+.task-item.task-family{background:var(--task-band)}
 .task-item>.task-row{padding:10px 0;min-height:42px}
 .task-item .task-title{color:var(--task-ink);font-weight:550}
 .task-family>.task-row .task-title{font-size:14px;font-weight:650}
@@ -182,7 +182,7 @@
 .task-family .subtasks{margin:1px 0 2px 28px}
 .task-family .subtasks summary{color:var(--task-ink);font-weight:550;padding-bottom:6px}
 .task-family .subtasks>ul{border-left:1px solid var(--task-border);padding-left:11px}
-.task-family .subtask-row{position:relative;margin:6px 0;padding:7px 8px;border:1px solid var(--task-border);border-radius:6px;background:white}
+.task-family .subtask-row{position:relative;margin:6px 0;padding:7px 8px;border:1px solid var(--task-border);border-radius:6px;background:transparent}
 .task-family .subtask-row::before{content:"";position:absolute;left:-12px;top:50%;width:11px;border-top:1px solid var(--task-border)}
 .task-family .subtask-today{border-color:var(--task-accent)}
 .task-family .subtask-row time{color:var(--task-ink)}
@@ -190,8 +190,8 @@
 .calendar-week-family .calendar-week-period,.calendar-period-bar.task-color{background:var(--task-band);color:var(--task-ink)}
 .calendar-week-family .calendar-week-period{box-shadow:inset 3px 0 var(--task-accent)}
 .calendar-period-bar.task-color.period-start{box-shadow:inset 3px 0 var(--task-accent)}
-.calendar-week-family .calendar-week-period.period-done,.calendar-period-bar.task-color.period-done{background:var(--task-tint);color:var(--task-ink)}
-.calendar-task-group{margin-bottom:10px;padding:8px 7px;border:1px solid var(--task-border);border-left:3px solid var(--task-accent);border-radius:8px;background:var(--task-tint)}
+.calendar-week-family .calendar-week-period.period-done,.calendar-period-bar.task-color.period-done{background:var(--task-band);color:var(--task-ink)}
+.calendar-task-group{margin-bottom:10px;padding:8px 7px;border:1px solid var(--task-border);border-left:3px solid var(--task-accent);border-radius:8px;background:var(--task-band)}
 .calendar-group-heading{display:flex;align-items:flex-start;gap:5px;color:var(--task-ink)}
 .calendar-group-heading strong{flex:1;min-width:0;font-size:12px;line-height:1.5;font-weight:650;overflow-wrap:anywhere}
 .calendar-group-heading>span{font-size:9px;line-height:18px;padding:0 3px;background:#ffffffa8;border-radius:4px;white-space:nowrap;font-variant-numeric:tabular-nums}
@@ -200,16 +200,16 @@
 .calendar-group-children>li{position:relative;margin:5px 0 0}
 .calendar-group-children>li::before{content:"";position:absolute;left:-9px;top:16px;width:8px;border-top:1px solid var(--task-border)}
 .calendar-task-group .calendar-week-task{padding:6px 0;gap:6px}
-.calendar-group-children .calendar-week-task{padding:6px;background:#fff;border:1px solid var(--task-border);border-radius:5px}
+.calendar-group-children .calendar-week-task{padding:6px;background:transparent;border:1px solid var(--task-border);border-radius:5px}
 .calendar-task-group .calendar-week-task input{accent-color:var(--task-accent)}
 .calendar-task-group .week-task-title{font-size:12px;color:#46523e;line-height:1.5}
 .calendar-group-items .week-task-title{font-weight:550;color:var(--task-ink)}
 .calendar-task-group .is-complete .week-task-title{color:#85907f}
-.calendar-month-group{display:block;padding:4px;border:1px solid var(--task-border);border-left:2px solid var(--task-accent);border-radius:5px;background:var(--task-tint);text-align:left}
+.calendar-month-group{display:block;padding:4px;border:1px solid var(--task-border);border-left:2px solid var(--task-accent);border-radius:5px;background:var(--task-band);text-align:left}
 .calendar-month-parent{display:block;font-size:10px;font-weight:650;color:var(--task-ink);line-height:1.5;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-bottom:3px}
 .calendar-month-children{display:flex;flex-direction:column;gap:2px;margin-left:3px;padding-left:4px;border-left:1px solid var(--task-border)}
 .calendar-month-group .calendar-task{background:transparent;color:var(--task-ink);padding:2px 1px;line-height:1.4}
-.calendar-month-children .calendar-task{background:#ffffffc0;border-radius:3px;padding-left:3px}
+.calendar-month-children .calendar-task{background:transparent;border-radius:3px;padding-left:3px}
 .calendar-month-group .calendar-done{opacity:.65}
 .calendar-group-more{display:block;margin:3px 0 0 5px;font-size:9px;color:var(--task-ink)}
 .calendar-week-event{padding:8px 6px;margin:6px 0;border:1px solid #dfe7f1;border-radius:6px;background:#f2f6fb}
@@ -218,3 +218,6 @@
 .calendar-week-family .calendar-week-period{margin:0 2px;padding:8px 9px;min-height:34px;border-radius:6px}
 .calendar-week-family .calendar-attached-children{align-self:start;margin:-1px 6px 0 2px;border-top:0;border-radius:0 0 8px 8px;padding:1px 7px 8px}
 .calendar-attached-children .calendar-group-children{margin-top:0;padding-top:1px}
+
+.calendar-week-task-row{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));padding:10px 0 14px;border-bottom:1px solid var(--border)}
+.calendar-week-task-row .calendar-task-group{margin:0 6px 0 2px}
