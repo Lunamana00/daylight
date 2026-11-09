@@ -73,7 +73,15 @@ export function PlannerCalendar({ date, data, busy, onSelectDate, onManage, onCh
           const column = (Date.parse(start) - Date.parse(week[0])) / 86_400_000 + 1;
           const span = (Date.parse(end) - Date.parse(start)) / 86_400_000 + 1;
           return <section key={task.id} className="calendar-week-family task-color" style={{ "--task-hue": taskHue(task.id) } as CSSProperties} aria-label={task.title}>
-            <button className={`calendar-week-period ${task.done ? "period-done" : ""}`} style={{ gridColumn: `${column} / span ${span}`, gridRow: 1 }} disabled={busy} onClick={() => onSelectDate(start)} title={`${task.title} · ${dateLabel(task.date)} – ${dateLabel(taskEnd)}`}>
+            <button
+              className={`calendar-week-period ${task.done ? "period-done" : ""}`}
+              data-joins-start={task.subtasks.some(child => child.date === start)}
+              data-joins-end={task.subtasks.some(child => child.date === end)}
+              style={{ gridColumn: `${column} / span ${span}`, gridRow: 1 }}
+              disabled={busy}
+              onClick={() => onSelectDate(start)}
+              title={`${task.title} · ${dateLabel(task.date)} – ${dateLabel(taskEnd)}`}
+            >
               {task.date < from && <span aria-hidden="true">‹</span>}<span className="week-period-title">{task.title}</span>{task.subtasks.length > 0 ? <small>{task.subtasks.filter(child => child.done).length}/{task.subtasks.length}</small> : task.done ? <Check size={12} /> : null}{taskEnd > to && <span aria-hidden="true">›</span>}
             </button>
             {week.map((key, index) => {
