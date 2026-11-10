@@ -9,7 +9,7 @@ export async function GET(request: Request) {
     const { db, ownerId, user } = await workAccess(request), params = new URL(request.url).searchParams;
     if (!params.has("artifactId")) return Response.json({ ...await readWorkCatalog(db, user!), uploadsAvailable: true }, { headers: privateHeaders });
     const artifactId = params.get("artifactId") || null;
-    const detail = await readWorkDetail(db, ownerId, artifactId, params.has("export") ? null : params.get("cursor"), params.has("export") ? null : params.get("stageId"), params.has("export") ? 5000 : 100);
+    const detail = await readWorkDetail(db, ownerId, artifactId, params.has("export") ? null : params.get("cursor"), params.has("export") ? null : params.get("stageId"), params.has("export") ? 5000 : 100, !params.has("export") && params.get("view") === "materials");
     if (params.has("export") && artifactId) {
       if (detail.nextCursor) throw new PlannerError("한 번에 기록 5,000개까지 내보낼 수 있어요.", 413);
       const artifact = await ownedArtifact(db, ownerId, artifactId);

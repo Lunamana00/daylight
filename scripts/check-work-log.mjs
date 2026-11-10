@@ -15,11 +15,12 @@ function moduleURL(path, imports = {}) {
   return 'data:text/javascript;base64,' + Buffer.from(code).toString('base64');
 }
 const coreURL = moduleURL('../lib/planner-core.ts');
-const workURL = moduleURL('../lib/work-log.ts', { './planner-core': coreURL });
+const typesURL = moduleURL('../lib/work-log-types.ts');
+const workURL = moduleURL('../lib/work-log.ts', { './planner-core': coreURL, './work-log-types': typesURL });
 const { change, ensureMember } = await import(coreURL);
 const { changeWork, readWorkCatalog, readWorkDetail, workConnection, ingestWork } = await import(workURL);
 const { uploadWorkFile, ownedWorkFile, readWorkFile, workFileType, maxWorkStorageSize } = await import(moduleURL('../lib/work-files.ts', { './planner-core': coreURL, './work-log': workURL }));
-const { workMarkdown } = await import(moduleURL('../lib/work-log-types.ts'));
+const { workMarkdown } = await import(typesURL);
 const sqlite = new DatabaseSync(':memory:'); sqlite.exec('PRAGMA foreign_keys=ON');
 for (const file of readdirSync(new URL('../drizzle/', import.meta.url)).filter(file => file.endsWith('.sql')).sort()) sqlite.exec(readFileSync(new URL('../drizzle/' + file, import.meta.url), 'utf8'));
 const db = {
@@ -34,6 +35,14 @@ const alice = { userId: 'alice', email: 'alice@example.test' }, bob = { userId: 
 await ensureMember(db, bob);
 const artifact = await changeWork(db, alice, { op: 'artifact.add', title: 'Research report', description: 'Final report and figures', stages: ['Analysis', 'Report'] });
 const other = await changeWork(db, bob, { op: 'artifact.add', title: 'Private', stages: ['Draft'] });
+const summary = { op: 'artifact.patch', id: artifact.id, title: 'Research report', description: 'Final report and figures', background: 'Compare model errors', contribution: 'Designed the experiment', decisions: 'Use a common baseline', results: 'Finished the comparison', reflection: '' };
+await changeWork(db, alice, summary);
+await changeWork(db, alice, { op: 'artifact.patch', id: artifact.id, title: summary.title, description: summary.description });
+let savedArtifact = (await readWorkCatalog(db, alice)).artifacts[0];
+for (const field of ['background', 'contribution', 'decisions', 'results', 'reflection']) assert.equal(savedArtifact[field], summary[field], 'Other project edits preserve the summary');
+await assert.rejects(changeWork(db, bob, summary), error => error.status === 404);
+await assert.rejects(changeWork(db, alice, { ...summary, contribution: 'x'.repeat(4001) }));
+assert.equal((await readWorkCatalog(db, alice)).artifacts[0].contribution, summary.contribution, 'Invalid summaries do not replace saved text');
 const stages = (await readWorkDetail(db, alice.userId, artifact.id)).stages;
 assert.equal(stages.length, 2);
 await assert.rejects(readWorkDetail(db, bob.userId, artifact.id), error => error.status === 404);
@@ -117,8 +126,23 @@ const firstPage = await readWorkDetail(db, alice.userId, artifact.id, null, null
 const nextPage = await readWorkDetail(db, alice.userId, artifact.id, firstPage.nextCursor, null, 2);
 assert.equal(firstPage.entries.length, 2);
 assert.ok(nextPage.entries.length > 0 && !nextPage.entries.some(entry => firstPage.entries.some(first => first.id === entry.id)), 'Timeline cursors do not repeat records');
+const reference = await changeWork(db, alice, { op: 'entry.add', artifactId: artifact.id, kind: 'progress', title: 'Reference PDF', occurredAt: '2026-01-01T00:00:00Z' });
+await uploadWorkFile(db, alice.userId, reference.id, 'reference.pdf', pdf);
+await changeWork(db, alice, { op: 'entry.add', artifactId: artifact.id, kind: 'progress', title: 'Latest plain note', occurredAt: '2026-11-11T00:00:00Z' });
+let materialCursor = null;
+const materialEntries = [];
+do {
+  const page = await readWorkDetail(db, alice.userId, artifact.id, materialCursor, null, 1, true);
+  materialEntries.push(...page.entries); materialCursor = page.nextCursor;
+} while (materialCursor);
+assert.deepEqual(materialEntries.map(entry => entry.title).sort(), ['Analysis complete', 'Reference PDF', 'Write report'], 'Materials paginate links and files, excluding plain and hidden records');
+assert.equal(materialEntries.find(entry => entry.id === reference.id).files.length, 1, 'Older file-only records remain reachable');
+await assert.rejects(readWorkDetail(db, bob.userId, artifact.id, null, null, 1, true), error => error.status === 404);
 const markdown = workMarkdown((await readWorkCatalog(db, alice)).artifacts[0], detail.entries, detail.stages, 'https://example.test', true);
 assert.match(markdown, /Final report and figures/); assert.match(markdown, /User correction/);
+assert.match(markdown, /## 내 역할·기여\n\nDesigned the experiment/);
+assert.match(markdown, /## 결과\n\nFinished the comparison/);
+assert.ok(!markdown.includes('## 회고'), 'Empty summary fields add no export headings');
 assert.ok(markdown.includes('/api/worklog/files/' + file.id)); assert.ok(!markdown.includes('Write report'));
 await changeWork(db, alice, { op: 'connection.revoke', id: grant.id });
 assert.equal(await workConnection(db, auth), null);

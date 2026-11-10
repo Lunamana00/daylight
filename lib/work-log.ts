@@ -1,6 +1,7 @@
 import { day, ensureMember, PlannerError } from "./planner-core";
 import type { Identity } from "./planner-core";
 import type { WorkArtifact, WorkCatalog, WorkConnection, WorkDetail, WorkEntry, WorkFile, WorkKind, WorkLink, WorkStage, WorkTask } from "./work-log-types";
+import { workSummaryFields } from "./work-log-types";
 
 export function workText(value: unknown, label: string, max = 240, empty = false) {
   if (typeof value !== "string" || (!empty && !value.trim()) || value.trim().length > max) throw new PlannerError(`${label}을 확인해 주세요.`);
@@ -33,7 +34,7 @@ function content(input: Record<string, unknown>) {
   };
 }
 export async function ownedArtifact(db: D1Database, ownerId: string, id: unknown) {
-  const artifact = (await db.prepare("SELECT id,title,description,url,updated_at AS updatedAt FROM work_artifacts WHERE id=? AND owner_id=?").bind(workText(id, "작업물", 100), ownerId).all<WorkArtifact>()).results[0];
+  const artifact = (await db.prepare("SELECT id,title,description,url,background,contribution,decisions,results,reflection,updated_at AS updatedAt FROM work_artifacts WHERE id=? AND owner_id=?").bind(workText(id, "작업물", 100), ownerId).all<WorkArtifact>()).results[0];
   if (!artifact) throw new PlannerError("작업물을 찾을 수 없어요.", 404);
   return artifact;
 }
@@ -49,14 +50,14 @@ async function associations(db: D1Database, ownerId: string, input: Record<strin
   return { artifactId, stageId, taskId, subtaskId };
 }
 export async function readWorkCatalog(db: D1Database, user: Identity): Promise<WorkCatalog> {
-  const artifacts = await db.prepare(`SELECT a.id,a.title,a.description,a.url,a.updated_at AS updatedAt,
+  const artifacts = await db.prepare(`SELECT a.id,a.title,a.description,a.url,a.background,a.contribution,a.decisions,a.results,a.reflection,a.updated_at AS updatedAt,
     (SELECT count(*) FROM work_entries e WHERE e.artifact_id=a.id AND e.owner_id=a.owner_id AND e.hidden=0) AS entryCount,
     (SELECT count(*) FROM work_task_links l JOIN tasks t ON t.id=l.task_id WHERE l.artifact_id=a.id AND t.owner_id=a.owner_id) AS taskCount
     FROM work_artifacts a WHERE a.owner_id=? ORDER BY a.updated_at DESC,a.id`).bind(user.userId).all<WorkArtifact>();
   const pending = (await db.prepare("SELECT count(*) AS n FROM work_entries WHERE owner_id=? AND artifact_id IS NULL AND hidden=0").bind(user.userId).all<{ n: number }>()).results[0].n;
   return { artifacts: artifacts.results, pending };
 }
-export async function readWorkDetail(db: D1Database, ownerId: string, artifactId: string | null, cursor?: string | null, stageId?: string | null, limit = 100): Promise<WorkDetail> {
+export async function readWorkDetail(db: D1Database, ownerId: string, artifactId: string | null, cursor?: string | null, stageId?: string | null, limit = 100, materialsOnly = false): Promise<WorkDetail> {
   if (artifactId) await ownedArtifact(db, ownerId, artifactId);
   let beforeTime: string | null = null, beforeId: string | null = null;
   if (cursor) {
@@ -70,7 +71,8 @@ export async function readWorkDetail(db: D1Database, ownerId: string, artifactId
     FROM work_entries e LEFT JOIN tasks t ON t.id=e.task_id AND t.owner_id=e.owner_id
     LEFT JOIN task_subtasks s ON s.id=e.subtask_id AND s.task_id=t.id LEFT JOIN work_stages g ON g.id=e.stage_id AND g.artifact_id=e.artifact_id
     WHERE e.owner_id=? AND e.artifact_id IS ? AND e.hidden=0 AND (? IS NULL OR e.stage_id=?) AND (? IS NULL OR e.occurred_at<? OR (e.occurred_at=? AND e.id<?))
-    ORDER BY e.occurred_at DESC,e.id DESC LIMIT ?`).bind(ownerId, artifactId, stageId || null, stageId || null, beforeTime, beforeTime, beforeTime, beforeId, limit + 1).all<Omit<WorkEntry, "links" | "files"> & { links: string }>();
+    AND (?=0 OR json_array_length(e.links)>0 OR EXISTS (SELECT 1 FROM work_files f WHERE f.entry_id=e.id AND f.owner_id=e.owner_id))
+    ORDER BY e.occurred_at DESC,e.id DESC LIMIT ?`).bind(ownerId, artifactId, stageId || null, stageId || null, beforeTime, beforeTime, beforeTime, beforeId, Number(materialsOnly), limit + 1).all<Omit<WorkEntry, "links" | "files"> & { links: string }>();
   const page = records.results.slice(0, limit);
   const files = page.length ? (await db.prepare("SELECT id,entry_id AS entryId,file_name AS fileName,content_type AS contentType,size,created_at AS createdAt FROM work_files WHERE owner_id=? AND entry_id IN (SELECT value FROM json_each(?)) ORDER BY created_at,id").bind(ownerId, JSON.stringify(page.map(e => e.id))).all<WorkFile>()).results : [];
   const tasks = artifactId ? (await db.prepare("SELECT t.id,t.title,t.date,t.end_date AS endDate,t.done,l.stage_id AS stageId FROM tasks t JOIN work_task_links l ON l.task_id=t.id WHERE l.artifact_id=? AND t.owner_id=? ORDER BY t.created_at,t.rowid").bind(artifactId, ownerId).all<WorkTask>()).results : [];
@@ -91,7 +93,13 @@ export async function changeWork(db: D1Database, user: Identity, input: Record<s
     const adding = input.op === "artifact.add";
     const id = adding ? crypto.randomUUID() : (await ownedArtifact(db, user.userId, input.id)).id;
     const title = workText(input.title, "작업물 이름", 120), description = workText(input.description ?? "", "최종 목표", 2000, true), href = url(input.url);
-    if (!adding) await db.prepare("UPDATE work_artifacts SET title=?,description=?,url=?,updated_at=? WHERE id=? AND owner_id=?").bind(title, description, href, now, id, user.userId).run();
+    if (!adding) {
+      const fields = ["title=?", "description=?", "url=?", "updated_at=?"], values: (string | null)[] = [title, description, href, now];
+      for (const field of workSummaryFields) if (input[field.key] !== undefined) {
+        fields.push(`${field.key}=?`); values.push(workText(input[field.key], field.label, 4000, true));
+      }
+      await db.prepare(`UPDATE work_artifacts SET ${fields.join(",")} WHERE id=? AND owner_id=?`).bind(...values, id, user.userId).run();
+    }
     else {
       if (!Array.isArray(input.stages) || input.stages.length < 1 || input.stages.length > 20) throw new PlannerError("진행 단계를 1~20개 입력해 주세요.");
       const stages = input.stages.map(value => workText(value, "단계 이름", 120));

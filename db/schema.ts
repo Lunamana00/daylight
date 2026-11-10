@@ -59,6 +59,8 @@ export const milestoneOrder = sqliteTable("milestone_order", {
 export const workArtifacts = sqliteTable("work_artifacts", {
   id: text("id").primaryKey(), ownerId: text("owner_id").notNull().references(() => members.id),
   title: text("title").notNull(), description: text("description").notNull().default(""), url: text("url"),
+  background: text("background").notNull().default(""), contribution: text("contribution").notNull().default(""),
+  decisions: text("decisions").notNull().default(""), results: text("results").notNull().default(""), reflection: text("reflection").notNull().default(""),
   createdAt: text("created_at").notNull(), updatedAt: text("updated_at").notNull(),
 }, table => [index("work_artifacts_owner").on(table.ownerId, table.updatedAt)]);
 export const workTaskLinks = sqliteTable("work_task_links", {

@@ -43,6 +43,13 @@
       "when": 1794284681503,
       "tag": "0005_work_file_storage",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1794291042251,
+      "tag": "0006_work_project_summary",
+      "breakpoints": true
     }
   ]
 }
