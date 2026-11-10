@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
 import { readFileSync, readdirSync } from 'node:fs';
-import { change, readDay, readCalendar, monthRange, syncMilestones, listMilestones, day, addDays, widgetPlan, calendarTaskLanes, dailyTaskItems, weekRange, calendarTaskGroups, taskHue } from '../lib/planner-core.ts';
+import { change, readDay, readCalendar, monthRange, syncMilestones, listMilestones, day, addDays, widgetPlan, calendarTaskLanes, calendarWeekLayout, dailyTaskItems, weekRange, calendarTaskGroups, taskHue } from '../lib/planner-core.ts';
 
 const sqlite = new DatabaseSync(':memory:');
 sqlite.exec('PRAGMA foreign_keys=ON');
@@ -187,7 +187,25 @@ await change(db, alice, { op: 'subtask.patch', id: orderChild.id, done: true });
 assert.deepEqual((await readDay(db, alice, orderedDate)).tasks.map(task => task.id), expectedOrder, 'Completion and importance do not move the third task');
 assert.deepEqual((await readCalendar(db, alice, orderedDate, 'week')).tasks.map(task => task.id), expectedOrder, 'Weekly calendar uses the same order for single and multi-day tasks');
 await change(db, alice, { op: 'task.patch', id: orderTwo.id, date: '2040-06-05' });
-assert.deepEqual((await readCalendar(db, alice, '2040-06-05', 'week')).tasks.map(task => task.id), expectedOrder, 'A change of day keeps each task in its week row');
+assert.deepEqual((await readCalendar(db, alice, '2040-06-05', 'week')).tasks.map(task => task.id), expectedOrder, 'Changing a date preserves the stored task order');
 assert.deepEqual(dailyTaskItems(sameTitleTasks, '2026-12-01').map(item => item.id), ['a1', 'a2', 'b1'], 'Completed children keep their place');
 console.log('PASS: fixed task order across completion, importance, date changes and weekly refreshes.');
+const weekPositions = tasks => calendarWeekLayout(tasks, '2026-11-09', '2026-11-15').map(({ task, column, span, row }) => [task.id, column, span, row]);
+assert.deepEqual(weekPositions([
+  { id: 'mon-first', date: '2026-11-09', endDate: null },
+  { id: 'mon-second', date: '2026-11-09', endDate: null },
+  { id: 'tue-first', date: '2026-11-10', endDate: null },
+  { id: 'family', date: '2026-11-09', endDate: '2026-11-10' },
+  { id: 'wed-first', date: '2026-11-11', endDate: null },
+  { id: 'tue-last', date: '2026-11-10', endDate: null },
+  { id: 'next-week', date: '2026-11-16', endDate: null },
+]), [
+  ['mon-first', 1, 1, 1], ['mon-second', 1, 1, 2], ['tue-first', 2, 1, 1],
+  ['family', 1, 2, 3], ['wed-first', 3, 1, 1], ['tue-last', 2, 1, 4],
+], 'Each day starts at the top while overlapping tasks keep their existing order');
+assert.deepEqual(weekPositions([
+  { id: 'from-previous-week', date: '2026-11-08', endDate: '2026-11-09' },
+  { id: 'into-next-week', date: '2026-11-12', endDate: '2026-11-17' },
+]), [['from-previous-week', 1, 1, 1], ['into-next-week', 4, 4, 1]], 'Period cards clip to the week and reuse unoccupied days');
+console.log('PASS: independent weekly task columns, preserved overlapping order and clipped period cards.');
 sqlite.close();

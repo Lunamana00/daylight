@@ -74,6 +74,20 @@ export function calendarTaskLanes(tasks: Task[], from: string, to: string): Task
   }
   return lanes;
 }
+export function calendarWeekLayout(tasks: Task[], from: string, to: string) {
+  const nextRows = Array<number>(7).fill(1);
+  return tasks.filter(task => task.date <= to && (task.endDate ?? task.date) >= from).map(task => {
+    const start = task.date < from ? from : task.date;
+    const taskEnd = task.endDate ?? task.date;
+    const end = taskEnd > to ? to : taskEnd;
+    const column = (Date.parse(start) - Date.parse(from)) / 86_400_000;
+    const span = (Date.parse(end) - Date.parse(start)) / 86_400_000 + 1;
+    // Preserve order on occupied days without reserving rows on unrelated days.
+    const row = Math.max(...nextRows.slice(column, column + span));
+    nextRows.fill(row + 1, column, column + span);
+    return { task, start, end, column: column + 1, span, row };
+  });
+}
 export function taskHue(id: string) {
   let hash = 0;
   for (const character of id) hash = (Math.imul(hash, 31) + character.charCodeAt(0)) >>> 0;

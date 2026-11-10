@@ -213,11 +213,16 @@
 .calendar-group-more{display:block;margin:3px 0 0 5px;font-size:9px;color:var(--task-ink)}
 .calendar-week-event{padding:8px 6px;margin:6px 0;border:1px solid #dfe7f1;border-radius:6px;background:#f2f6fb}
 
-.calendar-week-family,.calendar-week-task-row{
+.calendar-week-tasks{
   display:grid;
   grid-template-columns:repeat(7,minmax(0,1fr));
+  align-items:start;
+  row-gap:16px;
   padding:8px 0;
 }
+.calendar-week-tasks:empty{display:none}
+.calendar-week-family,.calendar-week-task-row{min-width:0}
+.calendar-week-family{display:grid}
 .calendar-week-family .calendar-week-period{
   margin:0 2px;
   padding:8px 9px 8px 6px;
