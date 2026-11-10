@@ -16,6 +16,12 @@ The Mac widget shows today’s tasks, including subtasks scheduled for today. Th
 
 See [deployment instructions](deploy/README.md) for Google login, database setup, and Mac installation.
 
+## Work records
+
+Open **작업물** to set a final goal and its work stages. Add dated records, PDF reports, and images to each stage. Use the daily task menu to link a task to an artifact. Completion changes then appear in the artifact's history. Select records with the star for a portfolio export.
+
+Work records and attachments are private to their owner. A scoped collector can add outcomes from selected ChatGPT or Codex chats and create accepted next tasks. See [work records](docs/work-log.md) for local setup and collection.
+
 ## Original Sites deployment
 
 The original Sites deployment uses Sign in with ChatGPT and dots. Its database and access settings remain separate from the Google deployment. Keep its project ID and configuration in `.openai/hosting.json`. Do not apply the Google database changes to the Sites database.

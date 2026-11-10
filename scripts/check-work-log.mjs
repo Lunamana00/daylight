@@ -1,0 +1,149 @@
+import assert from 'node:assert/strict';
+import { DatabaseSync } from 'node:sqlite';
+import { readFileSync, readdirSync } from 'node:fs';
+import { mkdtemp, writeFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { createServer } from 'node:http';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+import ts from 'typescript';
+
+function moduleURL(path, imports = {}) {
+  let code = ts.transpileModule(readFileSync(new URL(path, import.meta.url), 'utf8'), { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } }).outputText;
+  for (const [name, url] of Object.entries(imports)) code = code.replaceAll(JSON.stringify(name), JSON.stringify(url));
+  return 'data:text/javascript;base64,' + Buffer.from(code).toString('base64');
+}
+const coreURL = moduleURL('../lib/planner-core.ts');
+const workURL = moduleURL('../lib/work-log.ts', { './planner-core': coreURL });
+const { change, ensureMember } = await import(coreURL);
+const { changeWork, readWorkCatalog, readWorkDetail, workConnection, ingestWork } = await import(workURL);
+const { uploadWorkFile, ownedWorkFile, workFileType } = await import(moduleURL('../lib/work-files.ts', { './planner-core': coreURL, './work-log': workURL }));
+const { workMarkdown } = await import(moduleURL('../lib/work-log-types.ts'));
+const sqlite = new DatabaseSync(':memory:'); sqlite.exec('PRAGMA foreign_keys=ON');
+for (const file of readdirSync(new URL('../drizzle/', import.meta.url)).filter(file => file.endsWith('.sql')).sort()) sqlite.exec(readFileSync(new URL('../drizzle/' + file, import.meta.url), 'utf8'));
+const db = {
+  prepare(sql) { let args = []; return {
+    bind(...values) { args = values; return this; },
+    async all() { return { results: sqlite.prepare(sql).all(...args) }; },
+    async run() { return { meta: { changes: Number(sqlite.prepare(sql).run(...args).changes) } }; },
+  }; },
+  async batch(statements) { sqlite.exec('BEGIN'); try { const results = []; for (const statement of statements) results.push(await statement.run()); sqlite.exec('COMMIT'); return results; } catch (error) { sqlite.exec('ROLLBACK'); throw error; } },
+};
+const alice = { userId: 'alice', email: 'alice@example.test' }, bob = { userId: 'bob', email: 'bob@example.test' };
+await ensureMember(db, bob);
+const artifact = await changeWork(db, alice, { op: 'artifact.add', title: 'Research report', description: 'Final report and figures', stages: ['Analysis', 'Report'] });
+const other = await changeWork(db, bob, { op: 'artifact.add', title: 'Private', stages: ['Draft'] });
+const stages = (await readWorkDetail(db, alice.userId, artifact.id)).stages;
+assert.equal(stages.length, 2);
+await assert.rejects(readWorkDetail(db, bob.userId, artifact.id), error => error.status === 404);
+await assert.rejects(changeWork(db, bob, { op: 'stage.patch', artifactId: artifact.id, id: stages[0].id, title: 'Changed', status: 'done' }), error => error.status === 404);
+assert.deepEqual((await readWorkCatalog(db, bob)).artifacts.map(item => item.id), [other.id]);
+const grant = await changeWork(db, alice, { op: 'connection.add', artifactId: artifact.id, provider: 'codex', scope: '/projects/research/' });
+const auth = 'Bearer ' + grant.secret, connection = await workConnection(db, auth);
+assert.equal(connection.scope, '/projects/research');
+assert.notEqual(sqlite.prepare('SELECT token_hash FROM work_connections').get().token_hash, grant.secret);
+assert.equal(await workConnection(db, 'Bearer not-a-token'), null);
+const record = { sourceKey: 'chat/turn/analysis', title: 'Analysis complete', body: 'Compared two models.', kind: 'result', stageId: stages[0].id, occurredAt: '2026-11-10T11:00:00+09:00', links: [{ label: 'Result', url: 'https://example.test/report' }] };
+await assert.rejects(ingestWork(db, connection, { entries: Array.from({ length: 6 }, (_, i) => ({ ...record, sourceKey: 'too-many-' + i })) }));
+let imported = await ingestWork(db, connection, { entries: [record] });
+assert.equal(imported.imported, 1);
+const entryId = imported.records[0].id;
+await changeWork(db, alice, { op: 'entry.patch', id: entryId, body: 'User correction', stageId: stages[1].id, featured: true });
+assert.equal((await ingestWork(db, connection, { entries: [record] })).duplicate, 1);
+let detail = await readWorkDetail(db, alice.userId, artifact.id);
+assert.equal(detail.entries[0].body, 'User correction');
+assert.equal(detail.entries[0].stageId, stages[1].id);
+assert.equal((await readWorkDetail(db, alice.userId, artifact.id, null, stages[0].id)).entries.length, 0);
+await assert.rejects(changeWork(db, bob, { op: 'entry.patch', id: entryId, title: 'Intrusion' }), error => error.status === 404);
+const foreignTask = await change(db, bob, { op: 'task.add', date: '2026-11-10', title: 'Private task' });
+await assert.rejects(changeWork(db, alice, { op: 'task.link', taskId: foreignTask.id, artifactId: artifact.id }), error => error.status === 403);
+await assert.rejects(ingestWork(db, connection, { entries: [{ ...record, sourceKey: 'valid-before-invalid' }, { ...record, sourceKey: 'wrong-owner', taskId: foreignTask.id }] }), error => error.status === 403);
+assert.equal(sqlite.prepare("SELECT count(*) AS n FROM work_entries WHERE source_key='valid-before-invalid'").get().n, 0, 'Invalid batch inserts nothing');
+await assert.rejects(ingestWork(db, connection, { entries: [{ ...record, sourceKey: 'bad-url', links: [{ label: 'Bad', url: 'javascript:alert(1)' }] }] }));
+const plan = { ...record, sourceKey: 'chat/turn/next-action', title: 'Write report', kind: 'plan', plannedTask: { title: 'Write report', date: '2026-11-11', endDate: '2026-11-13' } };
+imported = await ingestWork(db, connection, { entries: [plan] });
+assert.equal(imported.tasksCreated, 1);
+const plannedEntry = sqlite.prepare('SELECT task_id FROM work_entries WHERE id=?').get(imported.records[0].id);
+const taskId = plannedEntry.task_id;
+assert.equal(sqlite.prepare('SELECT done FROM tasks WHERE id=?').get(taskId).done, 0);
+await change(db, alice, { op: 'task.patch', id: taskId, done: true });
+await change(db, alice, { op: 'task.patch', id: taskId, done: false });
+let completed = sqlite.prepare("SELECT kind,stage_id FROM work_entries WHERE task_id=? AND provider='daylight'").all(taskId);
+assert.deepEqual(completed.map(item => item.kind), ['result', 'progress']);
+assert.ok(completed.every(item => item.stage_id === stages[0].id));
+const child = await change(db, alice, { op: 'subtask.add', taskId, date: '2026-11-12', title: 'Create figure' });
+await change(db, alice, { op: 'subtask.patch', id: child.id, done: true });
+assert.equal(sqlite.prepare('SELECT count(*) AS n FROM work_entries WHERE subtask_id=?').get(child.id).n, 1);
+await change(db, alice, { op: 'task.delete', id: taskId });
+assert.equal((await ingestWork(db, connection, { entries: [plan] })).tasksCreated, 0, 'Retry never resurrects a deleted task');
+assert.equal(sqlite.prepare('SELECT task_id FROM work_entries WHERE id=?').get(imported.records[0].id).task_id, null);
+const pending = { ...record, sourceKey: 'chat/turn/unclear', stageId: null, needsReview: true };
+await ingestWork(db, connection, { entries: [pending] });
+assert.equal((await readWorkCatalog(db, alice)).pending, 1);
+assert.equal((await readWorkCatalog(db, bob)).pending, 0);
+const pendingId = (await readWorkDetail(db, alice.userId, null)).entries[0].id;
+await changeWork(db, alice, { op: 'entry.patch', id: pendingId, artifactId: artifact.id, stageId: stages[0].id });
+await changeWork(db, alice, { op: 'entry.patch', id: pendingId, hidden: true });
+await ingestWork(db, connection, { entries: [pending] });
+assert.equal((await readWorkCatalog(db, alice)).pending, 0, 'Hidden imports stay hidden');
+const objects = new Map();
+const bucket = { async put(key, bytes) { objects.set(key, bytes); }, async delete(key) { objects.delete(key); } };
+const pdf = new TextEncoder().encode('%PDF-1.7\nreport-v1');
+const file = await uploadWorkFile(db, bucket, alice.userId, entryId, 'report.pdf', pdf, connection);
+assert.equal((await uploadWorkFile(db, bucket, alice.userId, entryId, 'report.pdf', pdf, connection)).id, file.id);
+const nextFile = await uploadWorkFile(db, bucket, alice.userId, entryId, 'report.pdf', new TextEncoder().encode('%PDF-1.7\nreport-v2'), connection);
+assert.notEqual(nextFile.id, file.id);
+assert.equal(objects.size, 2, 'New report versions preserve the earlier file');
+await assert.rejects(ownedWorkFile(db, bob.userId, file.id), error => error.status === 404);
+await assert.rejects(uploadWorkFile(db, bucket, bob.userId, entryId, 'report.pdf', pdf), error => error.status === 404);
+await assert.rejects(uploadWorkFile(db, bucket, alice.userId, entryId, 'image.png', new TextEncoder().encode('<svg onload="alert(1)">')));
+assert.throws(() => workFileType(new Uint8Array([1, 2, 3])));
+assert.equal(workFileType(new Uint8Array([137,80,78,71,13,10,26,10])), 'image/png');
+await assert.rejects(uploadWorkFile(db, bucket, alice.userId, entryId, 'big.pdf', new Uint8Array(10 * 1024 * 1024 + 1)), error => error.status === 413);
+const brokenDB = { ...db, prepare(sql) { if (sql.startsWith('INSERT INTO work_files')) return { bind() { return this; }, async run() { throw new Error('write failed'); } }; return db.prepare(sql); } };
+await assert.rejects(uploadWorkFile(brokenDB, bucket, alice.userId, entryId, 'report.pdf', new TextEncoder().encode('%PDF-1.7\nreport-v3')));
+assert.equal(objects.size, 2, 'Failed metadata writes clean up the new object');
+detail = await readWorkDetail(db, alice.userId, artifact.id);
+const firstPage = await readWorkDetail(db, alice.userId, artifact.id, null, null, 2);
+const nextPage = await readWorkDetail(db, alice.userId, artifact.id, firstPage.nextCursor, null, 2);
+assert.equal(firstPage.entries.length, 2);
+assert.ok(nextPage.entries.length > 0 && !nextPage.entries.some(entry => firstPage.entries.some(first => first.id === entry.id)), 'Timeline cursors do not repeat records');
+const markdown = workMarkdown((await readWorkCatalog(db, alice)).artifacts[0], detail.entries, detail.stages, 'https://example.test', true);
+assert.match(markdown, /Final report and figures/); assert.match(markdown, /User correction/);
+assert.ok(markdown.includes('/api/worklog/files/' + file.id)); assert.ok(!markdown.includes('Write report'));
+await changeWork(db, alice, { op: 'connection.revoke', id: grant.id });
+assert.equal(await workConnection(db, auth), null);
+const rotated = await changeWork(db, alice, { op: 'connection.add', artifactId: artifact.id, provider: 'codex', scope: '/projects/research' });
+assert.equal((await ingestWork(db, await workConnection(db, 'Bearer ' + rotated.secret), { entries: [record] })).duplicate, 1, 'Credential rotation preserves source identity');
+sqlite.prepare('UPDATE work_connections SET expires_at=?').run('2000-01-01T00:00:00.000Z');
+assert.equal(await workConnection(db, 'Bearer ' + rotated.secret), null);
+sqlite.close();
+console.log('PASS: private workflow records, task ownership, atomic imports, deduplication, user corrections, completion history, report versions, file access and revoked credentials.');
+
+const directory = await mkdtemp(join(tmpdir(), 'daylight-worklog-'));
+const requests = [], testToken = 'dwl_' + 'a'.repeat(64);
+const server = createServer(async (request, response) => {
+  let body = ''; for await (const chunk of request) body += chunk;
+  requests.push({ method: request.method, path: request.url, auth: request.headers.authorization, body });
+  response.setHeader('Content-Type', 'application/json'); response.end(JSON.stringify({ imported: 1 }));
+});
+try {
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  const config = join(directory, 'connection.json');
+  await writeFile(config, JSON.stringify({ origin: `http://127.0.0.1:${server.address().port}`, token: testToken }), { mode: 0o600 });
+  const client = new URL('./work-log-client.mjs', import.meta.url).pathname;
+  const run = promisify(execFile);
+  const result = await run(process.execPath, [client, 'context', config]);
+  assert.equal(requests[0].auth, 'Bearer ' + testToken);
+  assert.ok(!result.stdout.includes(testToken));
+  await new Promise((resolve, reject) => { const child = execFile(process.execPath, [client, 'import', config], error => error ? reject(error) : resolve()); child.stdin.end(JSON.stringify({ entries: [record] })); });
+  assert.deepEqual(JSON.parse(requests[1].body), { entries: [record] });
+  const reportPath = join(directory, 'report.pdf'); await writeFile(reportPath, pdf);
+  await run(process.execPath, [client, 'upload', config, entryId, reportPath]);
+  assert.equal(requests[2].path, '/api/worklog/files');
+  assert.ok(requests[2].body.includes('report.pdf'));
+  await writeFile(config, JSON.stringify({ origin: 'http://example.test', token: testToken }));
+  await assert.rejects(run(process.execPath, [client, 'context', config]), error => error.stderr.includes('Invalid connection file') && !error.stderr.includes(testToken));
+} finally { await new Promise(resolve => server.close(resolve)); await rm(directory, { recursive: true, force: true }); }
+console.log('PASS: collector client scopes authenticated requests, sends chosen reports and keeps credentials out of output.');

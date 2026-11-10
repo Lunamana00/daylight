@@ -28,6 +28,7 @@ yarn-error.log*
 
 # Local environment and keys
 .env*
+**/daylight-work-connection*.json
 .dev.vars*
 *.pem
 

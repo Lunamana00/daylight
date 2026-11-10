@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, type CSSProperties } from "react";
-import { ArrowRight, Check, MoreHorizontal, Pencil, Star, Trash2, X } from "lucide-react";
+import { ArrowRight, Check, FolderOpen, MoreHorizontal, Pencil, Star, Trash2, X } from "lucide-react";
 import { addDays, taskHue } from "../lib/planner-core";
 import type { Subtask, Task } from "../lib/planner-core";
 
@@ -9,10 +9,11 @@ type Props = {
   task: Task; date: string; busy: boolean; readOnly: boolean;
   onChange: (input: Record<string, unknown>, message?: string) => Promise<boolean>;
   onDelete: (task: Task, child?: Subtask) => void;
+  onOpenWorkLog?: (task: Task) => void;
 };
 const label = (date: string) => `${Number(date.slice(5, 7))}.${Number(date.slice(8))}`;
 
-export function PlannerTask({ task, date, busy, readOnly, onChange, onDelete }: Props) {
+export function PlannerTask({ task, date, busy, readOnly, onChange, onDelete, onOpenWorkLog }: Props) {
   const [menu, setMenu] = useState(false);
   const [editing, setEditing] = useState(false);
   const [title, setTitle] = useState(task.title);
@@ -48,6 +49,7 @@ export function PlannerTask({ task, date, busy, readOnly, onChange, onDelete }: 
         <button className={`icon-button star-button ${task.important ? "starred" : ""}`} aria-label={`${task.title} 중요 표시 ${task.important ? "해제" : "설정"}`} disabled={busy} onClick={() => void onChange({ op: "task.patch", id: task.id, important: !task.important })}><Star size={15} /></button>
         <div className="task-menu-anchor"><button className="icon-button" aria-label={`${task.title} 메뉴`} aria-expanded={menu} onClick={() => setMenu(!menu)}><MoreHorizontal size={18} /></button>
           {menu && <div className="task-menu">
+            {onOpenWorkLog && <button onClick={() => { onOpenWorkLog(task); setMenu(false); }}><FolderOpen size={13} />작업물·기록 연결</button>}
             <button onClick={() => { setTitle(task.title); setStart(task.date); setEnd(task.endDate ?? task.date); setEditing(true); setMenu(false); }}><Pencil size={13} />제목·기간 수정</button>
             {!task.endDate && !children.length && <button disabled={busy || date >= "2100-09-01"} onClick={async () => { if (await onChange({ op: "task.patch", id: task.id, date: addDays(date, 1), done: false }, "다음 날 할 일로 옮겼어요.")) setMenu(false); }}><ArrowRight size={13} />다음 날로 옮기기</button>}
             <button className="danger-text" onClick={() => { onDelete(task); setMenu(false); }}><Trash2 size={13} />삭제</button>

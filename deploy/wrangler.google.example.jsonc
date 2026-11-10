@@ -7,6 +7,7 @@
   "triggers": {"crons": ["*/5 * * * *"]},
   "rules": [{"type": "ESModule", "globs": ["**/*.js", "**/*.mjs"]}],
   "assets": {"directory": "../dist/client"},
+  "r2_buckets": [{"binding": "BUCKET", "bucket_name": "daylight-work-files"}],
   "vars": {
     "DAYLIGHT_AUTH_MODE": "google",
     "DAYLIGHT_GOOGLE_ORIGIN": "https://daylight-google.YOUR-SUBDOMAIN.workers.dev"

@@ -1,13 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ArrowRight, CalendarDays, Check, ChevronLeft, ChevronRight, Copy, ExternalLink, LoaderCircle, LockKeyhole, RefreshCw, Settings2, Share2, Sun, Sunrise, Users, X } from "lucide-react";
+import { ArrowRight, CalendarDays, Check, ChevronLeft, ChevronRight, Copy, ExternalLink, FolderOpen, LoaderCircle, LockKeyhole, RefreshCw, Settings2, Share2, Sun, Sunrise, Users, X } from "lucide-react";
 import { addDays, dailyTaskItems, today } from "../lib/planner-core";
 import type { DayData, Subtask, Task } from "../lib/planner-core";
 import { PlannerCalendar } from "../components/planner-calendar";
 import { PlannerTask } from "../components/planner-task";
+import { WorkLog } from "../components/work-log";
 
-type View = "mine" | "together";
+type View = "mine" | "together" | "work";
 type Modal = "connections" | "share" | "delete" | null;
 type Invitations = { canInvite: boolean; invitations: Array<{ email: string; joined: number }> };
 const shortDate = (date: string) => new Intl.DateTimeFormat("ko-KR", { month: "long", day: "numeric" }).format(new Date(date + "T00:00:00Z"));
@@ -22,6 +23,7 @@ export default function Planner({ googleLogin = false }: { googleLogin?: boolean
   const [date, setDate] = useState(today);
   const [data, setData] = useState<DayData | null>(null);
   const [view, setView] = useState<View>("together");
+  const [workTask, setWorkTask] = useState<Task | null>(null);
   const [filter, setFilter] = useState("all");
   const [person, setPerson] = useState("all");
   const [draft, setDraft] = useState("");
@@ -145,7 +147,7 @@ export default function Planner({ googleLogin = false }: { googleLogin?: boolean
   const connectionPrompt = calendarName.trim() ? `daylight 사이트 ${typeof window !== "undefined" ? window.location.origin : ""}의 연결된 도구를 사용해줘. Google Calendar에서 내가 팀에 공유할 마일스톤용으로 지정하는 캘린더 ${JSON.stringify(calendarName.trim())}만 읽어서, 한국 시간 오늘부터 90일 뒤까지의 마일스톤을 daylight에 동기화해줘. 페이지가 여러 개면 끝까지 읽고 성공한 뒤에만 sync_google_calendar_milestones를 호출해. 이 캘린더 일정이 사이트의 모든 팀원에게 공유되는 것을 허용해. 일정의 원래 ID와 제목을 유지하고, 종일 일정은 start.date, 시간 일정은 한국 시간 시작 날짜를 사용해. Google 캘린더에는 아무것도 쓰지 마. 내가 직접 작성한 일일 할 일은 get_daily_plan으로 읽기만 하고 추가·수정·완료 처리하지 마. 자동 실행은 아직 설정하지 마.` : "";
 
   function taskRow(task: Task, readOnly = false) {
-    return <PlannerTask key={`${date}-${task.id}`} task={task} date={date} busy={busy} readOnly={readOnly} onChange={mutate} onDelete={(parent, child) => { setDeleteTask(parent); setDeleteChild(child ?? null); setModal("delete"); }} />;
+    return <PlannerTask key={`${date}-${task.id}`} task={task} date={date} busy={busy} readOnly={readOnly} onChange={mutate} onOpenWorkLog={readOnly ? undefined : task => { setWorkTask(task); setView("work"); }} onDelete={(parent, child) => { setDeleteTask(parent); setDeleteChild(child ?? null); setModal("delete"); }} />;
   }
 
   return <div className="app-shell">
@@ -156,6 +158,7 @@ export default function Planner({ googleLogin = false }: { googleLogin?: boolean
       </button>
       <nav aria-label="주 메뉴">
         <button aria-current={view === "mine" ? "page" : undefined} onClick={() => setView("mine")}><Sunrise size={18} />내 할 일</button>
+        <button aria-current={view === "work" ? "page" : undefined} onClick={() => { setWorkTask(null); setView("work"); }}><FolderOpen size={18} />작업물</button>
         <button aria-current={view === "together" ? "page" : undefined} onClick={() => { setView("together"); setPerson("all"); }}><Users size={18} />서로의 오늘</button>
         <button title="함께 볼 사람 초대" onClick={() => setModal("share")}><Share2 size={18} />공유</button>
         <button title="연결 및 내 프로필" onClick={() => setModal("connections")}><Settings2 size={18} />설정</button>
@@ -163,11 +166,11 @@ export default function Planner({ googleLogin = false }: { googleLogin?: boolean
     </aside>
     <div className="main-shell">
       <main>
-        <h1 className="sr-only">{view === "mine" ? "내 할 일" : "서로의 오늘"}</h1>
-        <div className="date-toolbar"><div className="date-title"><CalendarDays size={17} /><strong>{longDate(date)}</strong>{date === today() && <span className="today-tag">오늘</span>}</div><div className="date-controls"><button className="text-button" onClick={() => selectDate(today())} disabled={busy}>오늘로</button><label className="date-picker"><CalendarDays size={15} /><input type="date" value={date} min="2000-01-01" max="2100-09-01" onChange={event => selectDate(event.target.value)} disabled={busy} aria-label="날짜 선택" /></label><button className={`icon-button ${refreshing ? "rotating" : ""}`} onClick={() => void load(date, true)} disabled={refreshing || busy} aria-label="새로고침"><RefreshCw size={15} /></button></div></div>
+        <h1 className="sr-only">{view === "mine" ? "내 할 일" : view === "work" ? "작업물" : "서로의 오늘"}</h1>
+        {view === "work" ? <WorkLog task={workTask} onClearTask={() => setWorkTask(null)} onOpenTask={value => { selectDate(value); setView("mine"); }} /> : <div className="date-toolbar"><div className="date-title"><CalendarDays size={17} /><strong>{longDate(date)}</strong>{date === today() && <span className="today-tag">오늘</span>}</div><div className="date-controls"><button className="text-button" onClick={() => selectDate(today())} disabled={busy}>오늘로</button><label className="date-picker"><CalendarDays size={15} /><input type="date" value={date} min="2000-01-01" max="2100-09-01" onChange={event => selectDate(event.target.value)} disabled={busy} aria-label="날짜 선택" /></label><button className={`icon-button ${refreshing ? "rotating" : ""}`} onClick={() => void load(date, true)} disabled={refreshing || busy} aria-label="새로고침"><RefreshCw size={15} /></button></div></div>}
         {error && <div className="error-banner" role="alert"><span>{error}{data ? " 마지막으로 불러온 내용을 표시하고 있어요." : ""}</span><button onClick={() => void load(date, true)}>다시 시도</button></div>}
         {view === "together" && <div className="week-strip"><button className="icon-button week-arrow" aria-label="지난주" onClick={() => selectDate(addDays(date, -7))} disabled={busy || date < "2000-01-08"}><ChevronLeft size={17} /></button>{week.map(value => <button key={value} className={`week-day ${value === date ? "selected" : ""} ${value === today() ? "actual-today" : ""}`} disabled={busy} onClick={() => selectDate(value)} aria-pressed={value === date}><span>{weekday(value)}</span><strong>{Number(value.slice(-2))}</strong><i /></button>)}<button className="icon-button week-arrow" aria-label="다음주" onClick={() => selectDate(addDays(date, 7))} disabled={busy || date > "2100-08-25"}><ChevronRight size={17} /></button></div>}
-        {!data ? (!error && <div className="loading-state" role="status"><LoaderCircle size={23} className="spin" /><p>불러오는 중…</p></div>) : <div className="content-grid">
+        {view !== "work" && (!data ? (!error && <div className="loading-state" role="status"><LoaderCircle size={23} className="spin" /><p>불러오는 중…</p></div>) : <div className="content-grid">
           <div className="primary-column">
             {view === "mine" && (data.date === date ? <section className="card tasks-card">
               <div className="section-heading">
@@ -203,7 +206,7 @@ export default function Planner({ googleLogin = false }: { googleLogin?: boolean
               return <section key={member.id} className="card member-card"><div className="member-card-heading"><Avatar name={member.name} index={i} /><div><h3>{member.name}{member.id === data.me.id && <span className="me-label">나</span>}</h3><span>{items.length ? `${items.length - count}개 남음 · ${count}개 완료` : "오늘 할 일 없음"}</span></div><span className="member-percent">{items.length ? Math.round(count / items.length * 100) : 0}<small>%</small></span></div>{tasks.length > 0 && <><div className="task-progress"><span style={{ width: `${items.length ? count / items.length * 100 : 0}%` }} /></div><ul className="task-list">{tasks.map(task => taskRow(task, task.ownerId !== data.me.id))}</ul></>}</section>;
             })}</>}
           </div>
-        </div>}
+        </div>)}
       </main>
     </div>
     {toast && <div className="toast" role="status"><Check size={16} />{toast}</div>}

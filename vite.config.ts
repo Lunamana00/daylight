@@ -63,6 +63,8 @@ export default defineConfig(async ({ command }) => {
           ...localBindingConfig,
           ...(command === "serve"
             ? {
+                // Work attachments use an isolated local bucket during development.
+                r2_buckets: localBindingConfig.r2_buckets.length ? localBindingConfig.r2_buckets : [{ binding: "BUCKET", bucket_name: "daylight-work-files-local" }],
                 services: [
                   {
                     binding: "CONNECTORS",
