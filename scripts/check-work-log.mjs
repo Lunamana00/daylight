@@ -18,13 +18,13 @@ const coreURL = moduleURL('../lib/planner-core.ts');
 const workURL = moduleURL('../lib/work-log.ts', { './planner-core': coreURL });
 const { change, ensureMember } = await import(coreURL);
 const { changeWork, readWorkCatalog, readWorkDetail, workConnection, ingestWork } = await import(workURL);
-const { uploadWorkFile, ownedWorkFile, workFileType } = await import(moduleURL('../lib/work-files.ts', { './planner-core': coreURL, './work-log': workURL }));
+const { uploadWorkFile, ownedWorkFile, readWorkFile, workFileType, maxWorkStorageSize } = await import(moduleURL('../lib/work-files.ts', { './planner-core': coreURL, './work-log': workURL }));
 const { workMarkdown } = await import(moduleURL('../lib/work-log-types.ts'));
 const sqlite = new DatabaseSync(':memory:'); sqlite.exec('PRAGMA foreign_keys=ON');
 for (const file of readdirSync(new URL('../drizzle/', import.meta.url)).filter(file => file.endsWith('.sql')).sort()) sqlite.exec(readFileSync(new URL('../drizzle/' + file, import.meta.url), 'utf8'));
 const db = {
   prepare(sql) { let args = []; return {
-    bind(...values) { args = values; return this; },
+    bind(...values) { args = values.map(value => value instanceof ArrayBuffer ? new Uint8Array(value) : value); return this; },
     async all() { return { results: sqlite.prepare(sql).all(...args) }; },
     async run() { return { meta: { changes: Number(sqlite.prepare(sql).run(...args).changes) } }; },
   }; },
@@ -87,23 +87,31 @@ await changeWork(db, alice, { op: 'entry.patch', id: pendingId, artifactId: arti
 await changeWork(db, alice, { op: 'entry.patch', id: pendingId, hidden: true });
 await ingestWork(db, connection, { entries: [pending] });
 assert.equal((await readWorkCatalog(db, alice)).pending, 0, 'Hidden imports stay hidden');
-const objects = new Map();
-const bucket = { async put(key, bytes) { objects.set(key, bytes); }, async delete(key) { objects.delete(key); } };
 const pdf = new TextEncoder().encode('%PDF-1.7\nreport-v1');
-const file = await uploadWorkFile(db, bucket, alice.userId, entryId, 'report.pdf', pdf, connection);
-assert.equal((await uploadWorkFile(db, bucket, alice.userId, entryId, 'report.pdf', pdf, connection)).id, file.id);
-const nextFile = await uploadWorkFile(db, bucket, alice.userId, entryId, 'report.pdf', new TextEncoder().encode('%PDF-1.7\nreport-v2'), connection);
+const file = await uploadWorkFile(db, alice.userId, entryId, 'report.pdf', pdf, connection);
+assert.equal((await uploadWorkFile(db, alice.userId, entryId, 'report.pdf', pdf, connection)).id, file.id);
+const nextFile = await uploadWorkFile(db, alice.userId, entryId, 'report.pdf', new TextEncoder().encode('%PDF-1.7\nreport-v2'), connection);
 assert.notEqual(nextFile.id, file.id);
-assert.equal(objects.size, 2, 'New report versions preserve the earlier file');
+assert.deepEqual(await readWorkFile(db, await ownedWorkFile(db, alice.userId, file.id)), pdf, 'New report versions preserve the earlier file');
 await assert.rejects(ownedWorkFile(db, bob.userId, file.id), error => error.status === 404);
-await assert.rejects(uploadWorkFile(db, bucket, bob.userId, entryId, 'report.pdf', pdf), error => error.status === 404);
-await assert.rejects(uploadWorkFile(db, bucket, alice.userId, entryId, 'image.png', new TextEncoder().encode('<svg onload="alert(1)">')));
+await assert.rejects(uploadWorkFile(db, bob.userId, entryId, 'report.pdf', pdf), error => error.status === 404);
+await assert.rejects(uploadWorkFile(db, alice.userId, entryId, 'image.png', new TextEncoder().encode('<svg onload="alert(1)">')));
 assert.throws(() => workFileType(new Uint8Array([1, 2, 3])));
 assert.equal(workFileType(new Uint8Array([137,80,78,71,13,10,26,10])), 'image/png');
-await assert.rejects(uploadWorkFile(db, bucket, alice.userId, entryId, 'big.pdf', new Uint8Array(10 * 1024 * 1024 + 1)), error => error.status === 413);
-const brokenDB = { ...db, prepare(sql) { if (sql.startsWith('INSERT INTO work_files')) return { bind() { return this; }, async run() { throw new Error('write failed'); } }; return db.prepare(sql); } };
-await assert.rejects(uploadWorkFile(brokenDB, bucket, alice.userId, entryId, 'report.pdf', new TextEncoder().encode('%PDF-1.7\nreport-v3')));
-assert.equal(objects.size, 2, 'Failed metadata writes clean up the new object');
+await assert.rejects(uploadWorkFile(db, alice.userId, entryId, 'big.pdf', new Uint8Array(10 * 1024 * 1024 + 1)), error => error.status === 413);
+const brokenDB = { ...db, prepare(sql) { if (sql.startsWith('INSERT INTO work_file_chunks')) return { bind() { return this; }, async run() { throw new Error('write failed'); } }; return db.prepare(sql); } };
+await assert.rejects(uploadWorkFile(brokenDB, alice.userId, entryId, 'report.pdf', new TextEncoder().encode('%PDF-1.7\nreport-v3')));
+assert.equal(sqlite.prepare('SELECT count(*) AS n FROM work_files').get().n, 2, 'A failed chunk write rolls back the file metadata');
+const largePdf = new Uint8Array(3 * 1024 * 1024 + 1).fill(73); largePdf.set(pdf);
+const large = await uploadWorkFile(db, alice.userId, entryId, 'large.pdf', largePdf);
+assert.deepEqual(await readWorkFile(db, await ownedWorkFile(db, alice.userId, large.id)), largePdf, 'Files larger than the D1 row limit round-trip through bounded chunks');
+sqlite.prepare('DELETE FROM work_files WHERE id=?').run(large.id);
+assert.equal(sqlite.prepare('SELECT count(*) AS n FROM work_file_chunks WHERE file_id=?').get(large.id).n, 0, 'Deleting a file also removes its bytes');
+sqlite.prepare('UPDATE work_files SET size=? WHERE id=?').run(maxWorkStorageSize, nextFile.id);
+await assert.rejects(uploadWorkFile(db, alice.userId, entryId, 'full.pdf', largePdf), error => error.status === 413 && error.message.includes('200MB'));
+assert.equal(sqlite.prepare('SELECT count(*) AS n FROM work_files').get().n, 2, 'Storage exhaustion changes no saved files');
+assert.equal((await uploadWorkFile(db, alice.userId, entryId, 'report.pdf', pdf)).id, file.id, 'A duplicate remains accessible when storage is full');
+sqlite.prepare('UPDATE work_files SET size=? WHERE id=?').run(pdf.length, nextFile.id);
 detail = await readWorkDetail(db, alice.userId, artifact.id);
 const firstPage = await readWorkDetail(db, alice.userId, artifact.id, null, null, 2);
 const nextPage = await readWorkDetail(db, alice.userId, artifact.id, firstPage.nextCursor, null, 2);

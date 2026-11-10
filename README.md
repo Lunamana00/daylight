@@ -22,6 +22,8 @@ Open **작업물** to set a final goal and its work stages. Add dated records, P
 
 Work records and attachments are private to their owner. A scoped collector can add outcomes from selected ChatGPT or Codex chats and create accepted next tasks. See [work records](docs/work-log.md) for local setup and collection.
 
+Attachments use the existing database. An R2 subscription is not necessary. Each file can be up to 10 MB. Uploads stop when total attachments reach 200 MB.
+
 ## Original Sites deployment
 
 The original Sites deployment uses Sign in with ChatGPT and dots. Its database and access settings remain separate from the Google deployment. Keep its project ID and configuration in `.openai/hosting.json`. Do not apply the Google database changes to the Sites database.

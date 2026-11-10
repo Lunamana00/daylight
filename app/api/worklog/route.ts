@@ -1,4 +1,3 @@
-import { env } from "cloudflare:workers";
 import { changeWork, ownedArtifact, readWorkCatalog, readWorkDetail } from "../../../lib/work-log";
 import { workMarkdown } from "../../../lib/work-log-types";
 import { PlannerError } from "../../../lib/planner-core";
@@ -8,7 +7,7 @@ export const dynamic = "force-dynamic";
 export async function GET(request: Request) {
   try {
     const { db, ownerId, user } = await workAccess(request), params = new URL(request.url).searchParams;
-    if (!params.has("artifactId")) return Response.json({ ...await readWorkCatalog(db, user!), uploadsAvailable: Boolean(env.BUCKET) }, { headers: privateHeaders });
+    if (!params.has("artifactId")) return Response.json({ ...await readWorkCatalog(db, user!), uploadsAvailable: true }, { headers: privateHeaders });
     const artifactId = params.get("artifactId") || null;
     const detail = await readWorkDetail(db, ownerId, artifactId, params.has("export") ? null : params.get("cursor"), params.has("export") ? null : params.get("stageId"), params.has("export") ? 5000 : 100);
     if (params.has("export") && artifactId) {

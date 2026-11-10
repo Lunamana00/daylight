@@ -23,7 +23,7 @@ Records can include decisions, progress, results, or accepted next actions. The 
 - `work_stages` holds the ordered flow and stage status.
 - `work_task_links` links existing tasks to artifacts and stages.
 - `work_entries` holds dated records and their provenance. A stable source key prevents duplicates. Hidden records retain that key. Deleting a task keeps its records.
-- `work_files` holds attachment metadata and checksums. The private R2 bucket holds only selected report and image bytes. Identical content on one record is deduplicated. A revised report has a new object key.
+- `work_files` holds attachment metadata and checksums. `work_file_chunks` holds selected report and image bytes in the existing D1 database. Identical content on one record is deduplicated. A revised report has a new file ID. Metadata and bytes are saved in one transaction.
 - `work_connections` holds one scoped source connection. The database stores a hash of the credential. A connection expires after 90 days and can be revoked.
 
 All work records, connection metadata, and attachments are owner-only. The existing **서로의 오늘** task-sharing behavior stays in place. An accepted next action imported as a daily task follows that existing sharing behavior. Project source files are not copied to the server.
@@ -35,13 +35,14 @@ The importer uses one D1 transaction for new records and their new tasks. Duplic
 Use Node.js 24 or later and the installed dependencies. The existing local database is separate from production.
 
 ```sh
-npx wrangler d1 migrations apply DB --local --config dist/server/wrangler.json --persist-to .wrangler/state
 npm run dev -- --hostname 127.0.0.1 --port 5173
 ```
 
-If `dist/server/wrangler.json` is absent, run `npm run build` first to create the local configuration. Migration `0004_work_log.sql` adds the new tables and completion triggers. The Vite development configuration provides an isolated local R2 bucket. The existing development sign-in behavior remains in use.
+If `dist/server/wrangler.json` is absent, run `npm run build` first to create the local configuration. Apply each SQL file in `drizzle/` once, in order, to the local database. Some existing local databases have no migration ledger. Do not apply all files again to those databases. Migration `0004_work_log.sql` adds the work tables and completion triggers. Migration `0005_work_file_storage.sql` adds file storage. The existing development sign-in behavior remains in use.
 
-For a later Google Worker deployment, create a private R2 bucket and add its `BUCKET` binding to the selected Google configuration. The example configuration contains this binding. Apply the new migration before deploying the branch. Keep the original Sites manifest and database separate. This branch does not create a production bucket or enable a collection schedule.
+The Google Worker uses the existing D1 binding for uploads. An R2 subscription is not required. Apply pending migrations before deploying the branch. Keep the original Sites manifest and database separate. Deployment does not enable a collection schedule.
+
+Each file can be up to 10 MB. The total attachment limit is 200 MB for this deployment. Uploads stop at that limit. The limit leaves database space for tasks and records. The existing Workers Free plan rejects requests at its service limits; it does not upgrade the account automatically. See [D1 pricing](https://developers.cloudflare.com/d1/platform/pricing/). An optional existing R2 binding can still read files from older local builds. New uploads always use D1.
 
 ## Connect selected chats
 
@@ -79,4 +80,4 @@ For an accepted, dated next action, a `plan` entry can include `plannedTask` wit
 
 The response includes imported and duplicate counts, created-task count, and record IDs. Use `scripts/work-log-client.mjs upload CONNECTION_FILE ENTRY_ID REPORT_FILE` to attach a chosen PDF, PNG, JPG, GIF, or WebP file. Each file can be up to 10 MB; each record can hold 20 files. New record versions keep old attachments.
 
-The bounded regression check is `node scripts/check-work-log.mjs`. It uses an in-memory database and a temporary file-store mock. It does not change production data.
+The bounded regression check is `node scripts/check-work-log.mjs`. It uses an in-memory database. It does not change production data.

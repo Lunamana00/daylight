@@ -1,4 +1,4 @@
-import { sqliteTable, text, integer, primaryKey, index, uniqueIndex, check } from "drizzle-orm/sqlite-core";
+import { sqliteTable, text, integer, blob, primaryKey, index, uniqueIndex, check } from "drizzle-orm/sqlite-core";
 import { sql } from "drizzle-orm";
 
 export const members = sqliteTable("members", {
@@ -98,3 +98,9 @@ export const workFiles = sqliteTable("work_files", {
   fileName: text("file_name").notNull(), contentType: text("content_type").notNull(), size: integer("size").notNull(),
   createdAt: text("created_at").notNull(),
 }, table => [index("work_files_entry").on(table.entryId), uniqueIndex("work_files_content").on(table.entryId, table.checksum)]);
+
+export const workFileChunks = sqliteTable("work_file_chunks", {
+  fileId: text("file_id").notNull().references(() => workFiles.id, { onDelete: "cascade" }),
+  position: integer("position").notNull(),
+  content: blob("content", { mode: "buffer" }).notNull(),
+}, table => [primaryKey({ columns: [table.fileId, table.position] })]);

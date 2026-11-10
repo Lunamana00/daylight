@@ -170,7 +170,7 @@ function RecordForm({ artifactId, stages, stageId, tasks, uploadsAvailable, onSa
       <label>관련 할 일<select name="taskId"><option value="">작업물에만 기록</option>{tasks.map(task => <option key={task.id} value={task.id}>{task.title}</option>)}</select></label>
       <div className="work-form-row"><label>결과 링크<input name="url" type="url" placeholder="https://" /></label><label>링크 이름<input name="linkLabel" maxLength={200} placeholder="보고서·문서" /></label></div>
     </fieldset>
-    <label>보고서·이미지<input type="file" multiple accept=".pdf,.png,.jpg,.jpeg,.gif,.webp" disabled={saving || !uploadsAvailable} onChange={event => setFiles(current => [...current, ...Array.from(event.target.files ?? [])])} /><small>{uploadsAvailable ? "파일당 10MB · PDF, PNG, JPG, GIF, WebP" : "파일 저장소를 연결하면 첨부할 수 있어요."}</small></label>
+    <label>보고서·이미지<input type="file" multiple accept=".pdf,.png,.jpg,.jpeg,.gif,.webp" disabled={saving || !uploadsAvailable} onChange={event => setFiles(current => [...current, ...Array.from(event.target.files ?? [])])} /><small>{uploadsAvailable ? "파일당 10MB · 전체 첨부 저장 공간 200MB · PDF, PNG, JPG, GIF, WebP" : "파일을 첨부할 수 없어요."}</small></label>
     {!!files.length && <ul className="work-file-queue">{files.map((file, index) => <li key={`${file.name}-${index}`}>{file.name}<button type="button" className="icon-button" aria-label={`${file.name} 첨부 취소`} disabled={saving} onClick={() => setFiles(current => current.filter((_, i) => i !== index))}><X size={12} /></button></li>)}</ul>}
     <div className="work-actions"><button type="button" className="text-button" disabled={saving} onClick={onClose}>닫기</button><button className="button primary compact" disabled={saving}>{saving ? "저장 중…" : createdId ? "남은 파일 올리기" : "기록 저장"}</button></div>
   </form>;
