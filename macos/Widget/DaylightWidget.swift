@@ -48,6 +48,10 @@ struct DaylightProvider: AppIntentTimelineProvider {
 
 struct DaylightWidgetView: View {
     let entry: DaylightEntry
+    @Environment(\.widgetRenderingMode) private var renderingMode
+
+    // Glass and vibrant modes need opaque foregrounds to preserve contrast.
+    private var foreground: Color { renderingMode == .fullColor ? .primary : .white }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 5) {
@@ -57,18 +61,18 @@ struct DaylightWidgetView: View {
                 Spacer()
                 if let snapshot = entry.snapshot {
                     Text("\(snapshot.completed)/\(snapshot.total) 완료")
-                        .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+                        .font(.caption.weight(.semibold).monospacedDigit())
                         .privacySensitive()
                 }
                 Button(intent: SyncDaylight()) {
-                    Image(systemName: "arrow.clockwise").font(.caption).frame(width: 26, height: 24)
+                    Image(systemName: "arrow.clockwise").font(.caption.weight(.semibold)).frame(width: 26, height: 24)
                 }
                 .buttonStyle(.plain).accessibilityLabel("daylight 동기화").help("캘린더와 할 일 동기화")
             }
 
             if let snapshot = entry.snapshot {
                 if snapshot.tasks.isEmpty {
-                    Text("오늘 할 일 없음").font(.caption).foregroundStyle(.secondary)
+                    Text("오늘 할 일 없음").font(.caption.weight(.medium))
                 } else {
                     ForEach(snapshot.tasks) { task in
                         // Match the web's HSL accent (38%, 43%) using SwiftUI's HSB initializer.
@@ -79,6 +83,7 @@ struct DaylightWidgetView: View {
                             HStack(spacing: 6) {
                                 Text((task.parentTitle.map { "\($0) · " } ?? "") + task.title)
                                     .lineLimit(1).strikethrough(task.done)
+                                    .foregroundStyle(foreground)
                                     .frame(maxWidth: .infinity, alignment: .leading)
                                 if let project = task.projectTitle {
                                     HStack(spacing: 4) {
@@ -86,19 +91,20 @@ struct DaylightWidgetView: View {
                                             .symbolRenderingMode(.palette)
                                             .widgetAccentedRenderingMode(.fullColor)
                                             .font(.system(size: 6))
+                                            .foregroundStyle(projectColor)
                                             .accessibilityHidden(true)
                                         Text(project).lineLimit(1)
                                     }
-                                    .font(.system(size: 9, weight: .medium))
-                                    .foregroundStyle(projectColor)
+                                    .font(.system(size: 10, weight: .semibold))
+                                    .foregroundStyle(renderingMode == .fullColor ? projectColor : foreground)
                                     .frame(maxWidth: 88, alignment: .trailing)
                                     .help(project)
                                     .accessibilityLabel("프로젝트 \(project)")
                                 }
                             }
                         }
-                        .toggleStyle(.checkbox).font(.caption).privacySensitive()
-                        .tint(projectColor)
+                        .toggleStyle(DaylightCheckboxStyle())
+                        .font(.system(size: 12, weight: .semibold)).privacySensitive()
                         .disabled(snapshot.accountID.isEmpty)
                     }
                 }
@@ -113,15 +119,40 @@ struct DaylightWidgetView: View {
                         Link("+\(snapshot.total - snapshot.tasks.count)", destination: Daylight.openApp)
                             .accessibilityLabel("나머지 할 일 \(snapshot.total - snapshot.tasks.count)개 열기")
                     }
-                }.font(.caption2).foregroundStyle(.secondary)
+                }.font(.caption2.weight(.medium))
             } else {
                 Spacer(minLength: 0)
-                Link("daylight 열기", destination: Daylight.openApp).font(.caption)
+                Link("daylight 열기", destination: Daylight.openApp).font(.caption.weight(.semibold))
                 Spacer(minLength: 0)
             }
         }
+        .foregroundStyle(foreground)
         .containerBackground(for: .widget) { Rectangle().fill(.ultraThinMaterial) }
         .widgetURL(Daylight.openApp)
+    }
+}
+
+private struct DaylightCheckboxStyle: ToggleStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        Button {
+            configuration.isOn.toggle()
+        } label: {
+            HStack(spacing: 7) {
+                Image(systemName: configuration.isOn ? "checkmark.square.fill" : "square")
+                    .symbolRenderingMode(.monochrome)
+                    .font(.system(size: 16, weight: .semibold))
+                    .frame(width: 18, height: 18)
+                    .accessibilityHidden(true)
+                configuration.label
+            }
+            .frame(minHeight: 20)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityRepresentation {
+            Toggle(isOn: configuration.$isOn) { configuration.label }
+                .toggleStyle(.checkbox)
+        }
     }
 }
 
