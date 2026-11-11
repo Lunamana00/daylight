@@ -34,7 +34,7 @@ function content(input: Record<string, unknown>) {
   };
 }
 export async function ownedArtifact(db: D1Database, ownerId: string, id: unknown) {
-  const artifact = (await db.prepare("SELECT id,title,description,url,background,contribution,decisions,results,reflection,updated_at AS updatedAt FROM work_artifacts WHERE id=? AND owner_id=?").bind(workText(id, "작업물", 100), ownerId).all<WorkArtifact>()).results[0];
+  const artifact = (await db.prepare("SELECT id,title,description,url,color_hue AS colorHue,background,contribution,decisions,results,reflection,updated_at AS updatedAt FROM work_artifacts WHERE id=? AND owner_id=?").bind(workText(id, "작업물", 100), ownerId).all<WorkArtifact>()).results[0];
   if (!artifact) throw new PlannerError("작업물을 찾을 수 없어요.", 404);
   return artifact;
 }
@@ -50,7 +50,7 @@ async function associations(db: D1Database, ownerId: string, input: Record<strin
   return { artifactId, stageId, taskId, subtaskId };
 }
 export async function readWorkCatalog(db: D1Database, user: Identity): Promise<WorkCatalog> {
-  const artifacts = await db.prepare(`SELECT a.id,a.title,a.description,a.url,a.background,a.contribution,a.decisions,a.results,a.reflection,a.updated_at AS updatedAt,
+  const artifacts = await db.prepare(`SELECT a.id,a.title,a.description,a.url,a.color_hue AS colorHue,a.background,a.contribution,a.decisions,a.results,a.reflection,a.updated_at AS updatedAt,
     (SELECT count(*) FROM work_entries e WHERE e.artifact_id=a.id AND e.owner_id=a.owner_id AND e.hidden=0) AS entryCount,
     (SELECT count(*) FROM work_task_links l JOIN tasks t ON t.id=l.task_id WHERE l.artifact_id=a.id AND t.owner_id=a.owner_id) AS taskCount
     FROM work_artifacts a WHERE a.owner_id=? ORDER BY a.updated_at DESC,a.id`).bind(user.userId).all<WorkArtifact>();
@@ -89,6 +89,13 @@ export async function readWorkDetail(db: D1Database, ownerId: string, artifactId
 export async function changeWork(db: D1Database, user: Identity, input: Record<string, unknown>) {
   await ensureMember(db, user);
   const now = new Date().toISOString();
+  if (input.op === "artifact.color") {
+    const artifact = await ownedArtifact(db, user.userId, input.id);
+    const hue = input.colorHue;
+    if (hue !== null && (typeof hue !== "number" || !Number.isInteger(hue) || hue < 0 || hue >= 360)) throw new PlannerError("프로젝트 색상을 선택해 주세요.");
+    await db.prepare("UPDATE work_artifacts SET color_hue=?,updated_at=? WHERE id=? AND owner_id=?").bind(hue, now, artifact.id, user.userId).run();
+    return { saved: true };
+  }
   if (input.op === "artifact.add" || input.op === "artifact.patch") {
     const adding = input.op === "artifact.add";
     const id = adding ? crypto.randomUUID() : (await ownedArtifact(db, user.userId, input.id)).id;

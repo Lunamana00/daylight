@@ -2,7 +2,7 @@
 export type Identity = { userId: string; email: string; fullName?: string | null };
 export type Member = { id: string; name: string };
 export type Subtask = { id: string; taskId: string; date: string; title: string; done: number };
-export type Task = { id: string; ownerId: string; date: string; endDate: string | null; title: string; done: number; important: number; createdAt: string; updatedAt: string; ownerName: string; subtasks: Subtask[]; projectId?: string | null; projectTitle?: string | null };
+export type Task = { id: string; ownerId: string; date: string; endDate: string | null; title: string; done: number; important: number; createdAt: string; updatedAt: string; ownerName: string; subtasks: Subtask[]; projectId?: string | null; projectTitle?: string | null; projectHue?: number | null };
 export type TaskProject = { id: string; title: string };
 export type Note = { ownerId: string; date: string; content: string; updatedAt: string; ownerName: string };
 export type Milestone = { ownerId: string; calendarId: string; eventId: string; title: string; date: string; url: string | null; ownerName: string; sourceName: string; syncedAt: string };
@@ -43,7 +43,7 @@ export async function ensureMember(db: D1Database, user: Identity) {
 async function readTasks(db: D1Database, from: string, to: string, ownerId: string | null = null, projectOwnerId = ownerId): Promise<Task[]> {
   const where = "t.date<=? AND COALESCE(t.end_date,t.date)>=? AND (? IS NULL OR t.owner_id=?)";
   const [tasks, children] = await Promise.all([
-    db.prepare(`SELECT t.id,t.owner_id AS ownerId,t.date,t.end_date AS endDate,t.title,t.done,t.important,t.created_at AS createdAt,t.updated_at AS updatedAt,p.name AS ownerName,a.id AS projectId,a.title AS projectTitle FROM tasks t JOIN members p ON p.id=t.owner_id LEFT JOIN work_task_links l ON l.task_id=t.id LEFT JOIN work_artifacts a ON a.id=l.artifact_id AND a.owner_id=t.owner_id AND a.owner_id=? WHERE ${where} ORDER BY t.created_at,t.rowid`).bind(projectOwnerId, to, from, ownerId, ownerId).all<Task>(),
+    db.prepare(`SELECT t.id,t.owner_id AS ownerId,t.date,t.end_date AS endDate,t.title,t.done,t.important,t.created_at AS createdAt,t.updated_at AS updatedAt,p.name AS ownerName,a.id AS projectId,a.title AS projectTitle,a.color_hue AS projectHue FROM tasks t JOIN members p ON p.id=t.owner_id LEFT JOIN work_task_links l ON l.task_id=t.id LEFT JOIN work_artifacts a ON a.id=l.artifact_id AND a.owner_id=t.owner_id AND a.owner_id=? WHERE ${where} ORDER BY t.created_at,t.rowid`).bind(projectOwnerId, to, from, ownerId, ownerId).all<Task>(),
     db.prepare(`SELECT s.id,s.task_id AS taskId,s.date,s.title,s.done FROM task_subtasks s JOIN tasks t ON t.id=s.task_id WHERE ${where} ORDER BY s.date,s.created_at,s.rowid`).bind(to, from, ownerId, ownerId).all<Subtask>(),
   ]);
   const grouped = new Map<string, Subtask[]>();
@@ -97,18 +97,23 @@ export function calendarWeekOffsets(cards: Array<{ column: number; span: number;
     return top;
   });
 }
-export function taskHue(task: string | Pick<Task, "id" | "projectId">) {
+export const projectColors = [
+  { hue: 148, name: "초록" }, { hue: 218, name: "파랑" }, { hue: 278, name: "보라" }, { hue: 28, name: "주황" },
+  { hue: 328, name: "분홍" }, { hue: 178, name: "청록" }, { hue: 55, name: "노랑" }, { hue: 245, name: "남색" },
+];
+export function taskHue(task: string | Pick<Task, "id" | "projectId" | "projectHue">) {
+  if (typeof task !== "string" && task.projectId && task.projectHue != null) return task.projectHue;
   const id = typeof task === "string" ? task : task.projectId ?? task.id;
   let hash = 0;
   for (const character of id) hash = (Math.imul(hash, 31) + character.charCodeAt(0)) >>> 0;
-  return [148, 218, 278, 28, 328, 178, 55, 245][hash % 8];
+  return projectColors[hash % projectColors.length].hue;
 }
 export function calendarProjects(tasks: Task[]) {
-  const groups = new Map<string, { id: string; title: string; total: number; completed: number }>();
+  const groups = new Map<string, { id: string; title: string; hue: number; total: number; completed: number }>();
   for (const task of tasks) {
     if (!task.projectId) continue;
     const key = task.projectId;
-    const group = groups.get(key) ?? { id: key, title: task.projectTitle ?? "프로젝트", total: 0, completed: 0 };
+    const group = groups.get(key) ?? { id: key, title: task.projectTitle ?? "프로젝트", hue: taskHue(task), total: 0, completed: 0 };
     group.total += 1;
     group.completed += Number(Boolean(task.done));
     groups.set(key, group);

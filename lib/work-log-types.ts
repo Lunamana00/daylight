@@ -1,7 +1,7 @@
 export type WorkKind = "plan" | "decision" | "progress" | "result";
 export type WorkProvider = "manual" | "daylight" | "codex" | "chatgpt";
 export type WorkLink = { label: string; url: string };
-export type WorkArtifact = { id: string; title: string; description: string; url: string | null; background: string; contribution: string; decisions: string; results: string; reflection: string; updatedAt: string; entryCount: number; taskCount: number };
+export type WorkArtifact = { id: string; title: string; description: string; url: string | null; colorHue: number | null; background: string; contribution: string; decisions: string; results: string; reflection: string; updatedAt: string; entryCount: number; taskCount: number };
 export type WorkStage = { id: string; title: string; position: number; status: "planned" | "active" | "done" };
 export type WorkFile = { id: string; entryId: string; fileName: string; contentType: string; size: number; createdAt: string };
 export type WorkEntry = {

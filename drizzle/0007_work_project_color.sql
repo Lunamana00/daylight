@@ -1,0 +1,1 @@
+ALTER TABLE `work_artifacts` ADD `color_hue` integer;

@@ -70,4 +70,6 @@ Google refresh tokens expire after seven days when the OAuth app is in Testing. 
 
 The widget shows up to four tasks scheduled for today. This includes dated subtasks. The header shows the completion count for all tasks scheduled for today. Right-click the widget and select **Edit Widget** to change **Google 일정 표시**. The Mac app holds the session in Keychain. A completion check runs in the Mac app and changes the same task on the Worker.
 
+Open **작업물** and select a project. Select a color below its name, or select **자동** for its default color. Linked tasks and subtasks use this color in the web planner and Mac widget. The widget also shows the project name.
+
 The refresh button runs in the Mac app and updates the connected calendars and daily tasks. The button does not write to Google Calendar. Calendar credentials stay on the server.

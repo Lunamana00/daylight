@@ -1,9 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
-import { Download, ExternalLink, FileText, FolderOpen, Paperclip, Plus, RefreshCw, Star, X } from "lucide-react";
+import { Check, Download, ExternalLink, FileText, FolderOpen, Paperclip, Plus, RefreshCw, Star, X } from "lucide-react";
 import type { Task } from "../lib/planner-core";
-import { taskHue } from "../lib/planner-core";
+import { projectColors, taskHue } from "../lib/planner-core";
 import { workKinds, workProviders, workSummaryFields } from "../lib/work-log-types";
 import type { WorkArtifact, WorkCatalog, WorkDetail, WorkEntry, WorkStage } from "../lib/work-log-types";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
@@ -60,7 +60,7 @@ export function WorkLog({ task, onClearTask, onOpenTask }: { task: Task | null; 
     </form>}
     {catalog ? <div className="work-layout">
       <nav className="work-artifacts" aria-label="작업물 선택">
-        {catalog.artifacts.map(item => <button key={item.id} className={`task-color ${selected === item.id ? "selected" : ""}`} style={{ "--task-hue": taskHue(item.id) } as CSSProperties} aria-pressed={selected === item.id} onClick={() => setSelected(item.id)}><FolderOpen size={16} /><span>{item.title}<small>기록 {item.entryCount} · 할 일 {item.taskCount}</small></span></button>)}
+        {catalog.artifacts.map(item => <button key={item.id} className={`task-color ${selected === item.id ? "selected" : ""}`} style={{ "--task-hue": item.colorHue ?? taskHue(item.id) } as CSSProperties} aria-pressed={selected === item.id} onClick={() => setSelected(item.id)}><FolderOpen size={16} /><span>{item.title}<small>기록 {item.entryCount} · 할 일 {item.taskCount}</small></span></button>)}
         <button className={selected === "" ? "selected" : ""} aria-pressed={selected === ""} onClick={() => setSelected("")}><span>연결 대기<small>{catalog.pending}개</small></span></button>
       </nav>
       {selected !== null ? <WorkDetailView key={selected} artifact={artifact} artifacts={catalog.artifacts} task={task?.projectId === selected ? null : task} onClearTask={onClearTask} onOpenTask={onOpenTask} onSaved={load} uploadsAvailable={catalog.uploadsAvailable} /> : <p className="muted work-empty">프로젝트를 추가해 주세요.</p>}
@@ -114,6 +114,15 @@ function WorkDetailView({ artifact, artifacts, task, onClearTask, onOpenTask, on
   </>;
   return <div className="work-detail" aria-busy={busy}>
     <header className="work-heading"><div><h2>{artifact?.title ?? "연결 대기"}</h2>{artifact?.description && <p className="work-goal">{artifact.description}</p>}{artifact?.url && <a href={artifact.url} target="_blank" rel="noreferrer" className="text-button">대표 결과물<ExternalLink size={12} /></a>}</div><button className="icon-button" disabled={busy} aria-label="기록 새로고침" onClick={() => void run(async () => {})}><RefreshCw size={15} /></button></header>
+    {artifact && <div role="group" aria-label="프로젝트 색상" className="mb-5 flex flex-wrap items-center gap-2">
+      <span className="tiny muted">색상</span>
+      {projectColors.map(color => <button key={color.hue} type="button" className="icon-button" disabled={busy} aria-label={`${color.name}색`} aria-pressed={artifact.colorHue === color.hue} title={color.name}
+        style={{ width: 26, height: 26, borderRadius: "50%", background: `hsl(${color.hue} 38% 43%)`, color: "white" }}
+        onClick={() => void change({ op: "artifact.color", id: artifact.id, colorHue: color.hue })}>
+        {artifact.colorHue === color.hue && <Check size={15} aria-hidden="true" />}
+      </button>)}
+      <button type="button" className="text-button" disabled={busy} aria-pressed={artifact.colorHue == null} onClick={() => void change({ op: "artifact.color", id: artifact.id, colorHue: null })}>{artifact.colorHue == null && <Check size={12} aria-hidden="true" />}자동</button>
+    </div>}
     {error && <p className="error-banner" role="alert">{error}</p>}
     {task && <div className="card work-task-context"><span><strong>{task.title}</strong>의 기록 연결</span>{artifact && <><StageSelect stages={detail?.stages ?? []} value={stage} onChange={setStage} /><button className="button primary compact" disabled={busy || !detail} onClick={() => void run(async () => { await api("", { op: "task.link", taskId: task.id, artifactId, stageId: stage || null }); onClearTask(); })}>여기에 연결</button></>}<button className="icon-button" aria-label="할 일 연결 닫기" onClick={onClearTask}><X size={14} /></button></div>}
     <Tabs value={view} onValueChange={value => { setDetail(null); setView(value); }} className="work-tabs">
