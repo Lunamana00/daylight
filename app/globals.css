@@ -156,7 +156,7 @@
 .calendar-week-period .week-period-title{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;text-align:left}
 .calendar-week-period small{font-size:10px;font-variant-numeric:tabular-nums}
 .calendar-week-period.period-done{background:#ecefe8;color:#89947f}
-.calendar-week-period.period-done .week-period-title{text-decoration:line-through}
+.calendar-week-period.period-done .week-period-title>span{text-decoration:line-through}
 .calendar-week-column{min-width:0;padding:9px 7px 15px;border-right:1px solid var(--border);min-height:220px}
 .calendar-week-column:last-child{border:0}
 .calendar-week-task{display:flex;align-items:flex-start;gap:6px;padding:8px 0;cursor:pointer}
@@ -175,12 +175,13 @@
 .task-color{--task-accent:hsl(var(--task-hue) 38% 43%);--task-ink:hsl(var(--task-hue) 32% 29%);--task-border:hsl(var(--task-hue) 32% 82%);--task-band:hsl(var(--task-hue) 40% 89%)}
 .task-color.task-unassigned{--task-accent:#859187;--task-ink:#59665c;--task-border:#dce2db;--task-band:#f1f4ef}
 .project-color-dot{display:inline-block;width:7px;height:7px;flex-shrink:0;border-radius:50%;background:var(--task-accent)}
-.task-project-footer{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:4px 0 0 28px;padding:7px 0 2px}
+.task-project-header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-left:28px;padding-top:8px}
 .task-project-picker{display:flex;align-items:center;gap:6px;min-width:0;max-width:75%;color:var(--task-ink)}
 .task-project-picker select{min-width:0;max-width:100%;border:0;background:transparent;color:inherit;padding:3px 2px;font-size:11px;text-overflow:ellipsis}
-.task-project-footer .text-button{font-size:10px;color:var(--task-ink)}
+.task-project-header .text-button{font-size:10px;color:var(--task-ink)}
 .calendar-week-period .week-period-title>span{display:block;overflow:hidden;text-overflow:ellipsis}
-.calendar-project-label,.calendar-week-task .calendar-project-label{display:flex;align-items:center;gap:4px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:9px;color:var(--task-ink);opacity:.8;margin-top:4px;line-height:1.4}
+.calendar-project-label,.calendar-week-task .calendar-project-label{display:flex;align-items:center;gap:4px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:9px;color:var(--task-ink);opacity:.8;margin:0 0 3px;line-height:1.4}
+.calendar-task-group>.calendar-project-label{margin:2px 0 0 20px}
 .calendar-projects{padding:14px 20px 16px;border-top:1px solid var(--border)}
 .calendar-projects h3{font-size:11px;color:#76816e;font-weight:500;margin-bottom:8px}
 .calendar-projects ul{display:flex;flex-wrap:wrap;gap:8px;list-style:none}

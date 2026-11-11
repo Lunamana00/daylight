@@ -18,7 +18,7 @@ See [deployment instructions](deploy/README.md) for Google login, database setup
 
 ## Work records
 
-Open **작업물** to create a project and set its goal and work stages. Add dated records, PDF reports, and images to each stage. Select a project when you add a task, or use the project selector below an existing task. Tasks and subtasks use the same project color in the list and calendar. The area below the calendar shows each project's task count and completion count. Use **기록 보기** to open the linked project. Completion changes appear in that project's history. Select records with the star for a portfolio export.
+Open **작업물** to create a project and set its goal and work stages. Add dated records, PDF reports, and images to each stage. Select a project when you add a task. For an existing task without a project, open its menu and select **프로젝트 연결**. Assigned project names appear above task titles in the list and calendar. Use the selector above a task to change or remove its project. Tasks and subtasks use the same project color in the list and calendar. The area below the calendar shows each project's task count and completion count. Use **기록 보기** to open the linked project. Completion changes appear in that project's history. Select records with the star for a portfolio export.
 
 Work records and attachments are private to their owner. A scoped collector can add outcomes from selected ChatGPT or Codex chats and create accepted next tasks. See [work records](docs/work-log.md) for local setup and collection.
 

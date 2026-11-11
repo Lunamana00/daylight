@@ -26,6 +26,12 @@ export function PlannerTask({ task, projects, date, busy, readOnly, onChange, on
   const completed = children.filter(child => child.done).length;
 
   return <li className={`task-item task-color ${task.projectId ? "" : "task-unassigned"} ${children.length || task.endDate ? "task-family" : ""}`} style={{ "--task-hue": taskHue(task) } as CSSProperties}>
+    {!readOnly && task.projectId && <div className="task-project-header">
+      <label className="task-project-picker"><span className="project-color-dot" aria-hidden="true" /><select aria-label={`${task.title} 프로젝트`} value={task.projectId ?? ""} disabled={busy} onChange={event => void onChange({ op: "task.link", taskId: task.id, artifactId: event.target.value || null })}>
+        <option value="">프로젝트 연결 해제</option>{projects.map(project => <option key={project.id} value={project.id}>{project.title}</option>)}
+      </select></label>
+      {onOpenWorkLog && <button className="text-button" onClick={() => onOpenWorkLog(task)}><FolderOpen size={12} />기록 보기</button>}
+    </div>}
     <div className={`task-row ${task.done ? "is-done" : ""}`}>
       <button className={`task-check ${task.done ? "checked" : ""}`} disabled={busy || readOnly || children.length > 0}
         onClick={() => void onChange({ op: "task.patch", id: task.id, done: !task.done })}
@@ -49,7 +55,7 @@ export function PlannerTask({ task, projects, date, busy, readOnly, onChange, on
         <button className={`icon-button star-button ${task.important ? "starred" : ""}`} aria-label={`${task.title} 중요 표시 ${task.important ? "해제" : "설정"}`} disabled={busy} onClick={() => void onChange({ op: "task.patch", id: task.id, important: !task.important })}><Star size={15} /></button>
         <div className="task-menu-anchor"><button className="icon-button" aria-label={`${task.title} 메뉴`} aria-expanded={menu} onClick={() => setMenu(!menu)}><MoreHorizontal size={18} /></button>
           {menu && <div className="task-menu">
-            {onOpenWorkLog && <button onClick={() => { onOpenWorkLog(task); setMenu(false); }}><FolderOpen size={13} />작업물·기록 연결</button>}
+            {onOpenWorkLog && <button onClick={() => { onOpenWorkLog(task); setMenu(false); }}><FolderOpen size={13} />{task.projectId ? "프로젝트·기록 보기" : "프로젝트 연결"}</button>}
             <button onClick={() => { setTitle(task.title); setStart(task.date); setEnd(task.endDate ?? task.date); setEditing(true); setMenu(false); }}><Pencil size={13} />제목·기간 수정</button>
             {!task.endDate && !children.length && <button disabled={busy || date >= "2100-09-01"} onClick={async () => { if (await onChange({ op: "task.patch", id: task.id, date: addDays(date, 1), done: false }, "다음 날 할 일로 옮겼어요.")) setMenu(false); }}><ArrowRight size={13} />다음 날로 옮기기</button>}
             <button className="danger-text" onClick={() => { onDelete(task); setMenu(false); }}><Trash2 size={13} />삭제</button>
@@ -84,11 +90,5 @@ export function PlannerTask({ task, projects, date, busy, readOnly, onChange, on
         <button className="text-button" disabled={busy || !childTitle.trim()}>추가</button>
       </form>}
     </details>}
-    {!readOnly && <div className="task-project-footer">
-      <label className="task-project-picker"><span className="project-color-dot" aria-hidden="true" /><select aria-label={`${task.title} 프로젝트`} value={task.projectId ?? ""} disabled={busy} onChange={event => void onChange({ op: "task.link", taskId: task.id, artifactId: event.target.value || null })}>
-        <option value="">프로젝트 미지정</option>{projects.map(project => <option key={project.id} value={project.id}>{project.title}</option>)}
-      </select></label>
-      {onOpenWorkLog && <button className="text-button" onClick={() => onOpenWorkLog(task)}><FolderOpen size={12} />{task.projectId ? "기록 보기" : "프로젝트 관리"}</button>}
-    </div>}
   </li>;
 }

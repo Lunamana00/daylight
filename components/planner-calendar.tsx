@@ -81,9 +81,10 @@ export function PlannerCalendar({ date, data, busy, onSelectDate, onManage, onCh
           if (!task.subtasks.length && (!task.endDate || task.endDate === task.date)) {
             return <section className="calendar-week-task-row" key={task.id} aria-label={task.title} data-column={column} data-span={span} style={{ gridColumn: column, gridRow: row }}>
               <div className={`calendar-task-group task-color ${task.projectId ? "" : "task-unassigned"}`} style={{ "--task-hue": taskHue(task) } as CSSProperties}>
+                {task.projectTitle && <small className="calendar-project-label"><i className="project-color-dot" aria-hidden="true" />{task.projectTitle}</small>}
                 <label className={`calendar-week-task ${task.done ? "is-complete" : ""}`}>
                   <input type="checkbox" checked={Boolean(task.done)} disabled={busy || loading} aria-label={`${task.title} ${task.done ? "완료 취소" : "완료"}`} onChange={() => void onChange({ op: "task.patch", id: task.id, done: !task.done })} />
-                  <span><span className="week-task-title">{task.title}</span>{task.projectTitle && <small className="calendar-project-label"><i className="project-color-dot" aria-hidden="true" />{task.projectTitle}</small>}</span>
+                  <span className="week-task-title">{task.title}</span>
                 </label>
               </div>
             </section>;
@@ -99,7 +100,7 @@ export function PlannerCalendar({ date, data, busy, onSelectDate, onManage, onCh
               onClick={() => onSelectDate(start)}
               title={`${task.title} · ${dateLabel(task.date)} – ${dateLabel(taskEnd)}`}
             >
-              {task.date < from && <span aria-hidden="true">‹</span>}<span className="week-period-title"><span>{task.title}</span>{task.projectTitle && <small className="calendar-project-label"><i className="project-color-dot" aria-hidden="true" />{task.projectTitle}</small>}</span>{task.subtasks.length > 0 ? <small>{task.subtasks.filter(child => child.done).length}/{task.subtasks.length}</small> : task.done ? <Check size={12} /> : null}{taskEnd > to && <span aria-hidden="true">›</span>}
+              {task.date < from && <span aria-hidden="true">‹</span>}<span className="week-period-title">{task.projectTitle && <small className="calendar-project-label"><i className="project-color-dot" aria-hidden="true" />{task.projectTitle}</small>}<span>{task.title}</span></span>{task.subtasks.length > 0 ? <small>{task.subtasks.filter(child => child.done).length}/{task.subtasks.length}</small> : task.done ? <Check size={12} /> : null}{taskEnd > to && <span aria-hidden="true">›</span>}
             </button>
             {week.slice(column - 1, column - 1 + span).map((key, index) => {
               const children = task.subtasks.filter(child => child.date === key);
@@ -168,12 +169,12 @@ export function PlannerCalendar({ date, data, busy, onSelectDate, onManage, onCh
           })}</span>}
           <span className="calendar-cell-items" aria-hidden="true">
             {groups.slice(0, 2).map(({ task, items }) => <span className={`calendar-month-group task-color ${task.projectId ? "" : "task-unassigned"} ${task.subtasks.length ? "has-children" : ""}`} key={task.id} style={{ "--task-hue": taskHue(task) } as CSSProperties} title={task.title}>
+              {task.projectTitle && <span className="calendar-project-label"><i className="project-color-dot" aria-hidden="true" />{task.projectTitle}</span>}
               {task.subtasks.length > 0 && <span className="calendar-month-parent">{task.title}</span>}
               <span className={task.subtasks.length ? "calendar-month-children" : ""}>{items.slice(0, 2).map(item => <span className={`calendar-chip calendar-task ${item.done ? "calendar-done" : ""}`} key={item.id} title={item.title}>
                 {item.done ? <Check size={10} /> : <Square size={10} />}<span>{item.title}</span>
               </span>)}</span>
               {items.length > 2 && <span className="calendar-group-more">+{items.length - 2}개</span>}
-              {task.projectTitle && <span className="calendar-project-label"><i className="project-color-dot" aria-hidden="true" />{task.projectTitle}</span>}
             </span>)}
             {events.slice(0, 2).map(item => <span className="calendar-chip calendar-event" key={milestoneKey(item)} title={`${item.sourceName} · ${item.title}`}><CalendarDays size={10} /><span>{item.title}</span></span>)}
             {extra > 0 && <span className="calendar-more">+{extra}개</span>}
