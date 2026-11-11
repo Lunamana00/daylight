@@ -88,6 +88,14 @@ export function calendarWeekLayout(tasks: Task[], from: string, to: string) {
     return { task, start, end, column: column + 1, span, row };
   });
 }
+export function calendarWeekOffsets(cards: Array<{ column: number; span: number; height: number }>) {
+  const bottoms = Array<number>(7).fill(0);
+  return cards.map(({ column, span, height }) => {
+    const top = Math.max(...bottoms.slice(column - 1, column - 1 + span));
+    bottoms.fill(top + height + 8, column - 1, column - 1 + span);
+    return top;
+  });
+}
 export function taskHue(id: string) {
   let hash = 0;
   for (const character of id) hash = (Math.imul(hash, 31) + character.charCodeAt(0)) >>> 0;

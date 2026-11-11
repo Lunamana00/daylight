@@ -27,9 +27,8 @@ export default function Planner({ googleLogin = false }: { googleLogin?: boolean
   const [filter, setFilter] = useState("all");
   const [person, setPerson] = useState("all");
   const [draft, setDraft] = useState("");
-  const [multipleDays, setMultipleDays] = useState(false);
   const [periodStart, setPeriodStart] = useState(date);
-  const [periodEnd, setPeriodEnd] = useState(addDays(date, 1));
+  const [periodEnd, setPeriodEnd] = useState(date);
   const [nameDraft, setNameDraft] = useState("");
   const [calendarName, setCalendarName] = useState("");
   const [inviteEmail, setInviteEmail] = useState("");
@@ -46,7 +45,7 @@ export default function Planner({ googleLogin = false }: { googleLogin?: boolean
   const [deleteChild, setDeleteChild] = useState<Subtask | null>(null);
   const dateRef = useRef(date);
   const sequence = useRef(0);
-  const taskInput = useRef<HTMLInputElement>(null);
+  const taskInput = useRef<HTMLTextAreaElement>(null);
   const dialog = useRef<HTMLDialogElement>(null);
   dateRef.current = date;
 
@@ -65,7 +64,7 @@ export default function Planner({ googleLogin = false }: { googleLogin?: boolean
 
   useEffect(() => {
     if (view !== "mine") setData(null);
-    setPeriodStart(date); setPeriodEnd(date < "2100-09-01" ? addDays(date, 1) : date);
+    setPeriodStart(date); setPeriodEnd(date);
     void load(date);
   }, [date, load, view]);
   useEffect(() => {
@@ -180,20 +179,18 @@ export default function Planner({ googleLogin = false }: { googleLogin?: boolean
               <div className="task-progress"><span style={{ width: `${dailyItems.length ? completed / dailyItems.length * 100 : 0}%` }} /></div>
               <form className="task-composer" onSubmit={async event => {
                 event.preventDefault();
-                if (await mutate({ op: "task.add", date: multipleDays ? periodStart : date, endDate: multipleDays ? periodEnd : null, title: draft })) {
+                if (await mutate({ op: "task.add", date: periodStart, endDate: periodEnd === periodStart ? null : periodEnd, title: draft })) {
                   setDraft("");
                   setFilter("all");
-                  if (multipleDays) selectDate(periodStart);
+                  selectDate(periodStart);
                   taskInput.current?.focus();
                 }
               }}>
-                <input ref={taskInput} value={draft} onChange={event => setDraft(event.target.value)} maxLength={240} placeholder="새 할 일" aria-label="새 할 일" disabled={busy} />
-                <button type="button" className="period-toggle" aria-pressed={multipleDays} disabled={busy} onClick={() => setMultipleDays(!multipleDays)}>여러 날</button>
-                <button aria-label="할 일 추가" disabled={busy || !draft.trim()}>추가</button>
-                {multipleDays && <div className="task-period-fields">
-                  <label>시작일<input type="date" value={periodStart} min="2000-01-01" max="2100-09-01" required disabled={busy} onChange={event => setPeriodStart(event.target.value)} /></label>
+                <textarea ref={taskInput} value={draft} onChange={event => setDraft(event.target.value)} rows={2} maxLength={240} placeholder="새 할 일" aria-label="새 할 일" disabled={busy} />
+                <div className="task-composer-footer"><div className="task-period-fields">
+                  <label>시작일<input type="date" value={periodStart} min="2000-01-01" max="2100-09-01" required disabled={busy} onChange={event => { const value = event.target.value; setPeriodStart(value); setPeriodEnd(end => end < value ? value : end); }} /></label>
                   <span>—</span><label>종료일<input type="date" value={periodEnd} min={periodStart} max="2100-09-01" required disabled={busy} onChange={event => setPeriodEnd(event.target.value)} /></label>
-                </div>}
+                </div><button aria-label="할 일 추가" disabled={busy || !draft.trim()}>추가</button></div>
               </form>
               <div className="task-filter" aria-label="할 일 필터">{[["all", "전체"], ["open", "할 일"], ["done", "완료"]].map(([key, label]) => <button key={key} className={filter === key ? "selected" : ""} onClick={() => setFilter(key)}>{label}{key === "done" && <span>{completed}</span>}</button>)}</div>
               {ownFiltered.length ? <ul className="task-list">{ownFiltered.map(task => taskRow(task))}</ul> : <p className="empty-tasks">{myTasks.length ? filter === "done" ? "완료한 할 일 없음" : "남은 할 일 없음" : "할 일 없음"}</p>}

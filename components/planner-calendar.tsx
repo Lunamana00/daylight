@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useState, type CSSProperties } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
 import { CalendarDays, Check, ChevronLeft, ChevronRight, ExternalLink, Square } from "lucide-react";
 import { ko } from "react-day-picker/locale";
 import { Calendar, CalendarDayButton } from "./ui/calendar";
-import { addDays, calendarTaskGroups, calendarTaskLanes, calendarWeekLayout, milestoneKey, monthRange, taskHue, today, weekRange } from "../lib/planner-core";
+import { addDays, calendarTaskGroups, calendarTaskLanes, calendarWeekLayout, calendarWeekOffsets, milestoneKey, monthRange, taskHue, today, weekRange } from "../lib/planner-core";
 import type { CalendarData, DayData } from "../lib/planner-core";
 
 const calendarDate = (value: string) => new Date(value + "T00:00:00+09:00");
@@ -22,6 +22,7 @@ export function PlannerCalendar({ date, data, busy, onSelectDate, onManage, onCh
   const [saved, setSaved] = useState<CalendarData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const taskBoard = useRef<HTMLDivElement>(null);
   useEffect(() => {
     let active = true;
     setLoading(true); setError("");
@@ -40,6 +41,26 @@ export function PlannerCalendar({ date, data, busy, onSelectDate, onManage, onCh
   const selectedEvents = current?.milestones.filter(item => item.date === date) ?? [];
   const offset = (new Date(date + "T00:00:00Z").getUTCDay() + 6) % 7;
   const week = Array.from({ length: 7 }, (_, i) => addDays(date, i - offset));
+  useLayoutEffect(() => {
+    const board = taskBoard.current;
+    if (!board) return;
+    const cards = Array.from(board.children) as HTMLElement[];
+    const arrange = () => {
+      const sizes = cards.map(card => ({
+        column: Number(card.dataset.column), span: Number(card.dataset.span),
+        height: Math.max(1, Math.ceil(card.getBoundingClientRect().height)),
+      }));
+      calendarWeekOffsets(sizes).forEach((top, index) => {
+        cards[index].style.gridRow = `${top + 1} / span ${sizes[index].height}`;
+      });
+      board.classList.add("is-compact");
+    };
+    arrange();
+    const observer = new ResizeObserver(arrange);
+    observer.observe(board);
+    cards.forEach(card => observer.observe(card));
+    return () => observer.disconnect();
+  }, [current, view]);
 
   return <section className="card planner-calendar-card" aria-label="내 일정 달력" aria-busy={loading}>
     <div className="calendar-toolbar">
@@ -53,11 +74,11 @@ export function PlannerCalendar({ date, data, busy, onSelectDate, onManage, onCh
         <h3>{from.slice(0, 4)}년 {dateLabel(from)} – {from.slice(0, 4) !== to.slice(0, 4) ? `${to.slice(0, 4)}년 ` : ""}{dateLabel(to)}</h3>
         <button className="icon-button" aria-label="다음 주" disabled={busy || to >= "2100-09-01"} onClick={() => onSelectDate(addDays(date, 7) > "2100-09-01" ? "2100-09-01" : addDays(date, 7))}><ChevronRight size={18} /></button>
       </div>
-      <div className="planner-week-scroll"><div className="planner-week-board">
+      <div className="planner-week-scroll"><div className="planner-week-board" style={{ "--selected-start": `${offset / 7 * 100}%`, "--selected-end": `${(offset + 1) / 7 * 100}%` } as CSSProperties}>
         <div className="calendar-week-dates">{week.map((key, index) => <button key={key} className={`${key === date ? "selected" : ""} ${key === today() ? "actual-today" : ""}`} aria-pressed={key === date} aria-label={dateLabel(key)} disabled={busy || key < "2000-01-01" || key > "2100-09-01"} onClick={() => onSelectDate(key)}><span>{["월", "화", "수", "목", "금", "토", "일"][index]}</span><strong>{Number(key.slice(5, 7))}.{Number(key.slice(8))}</strong></button>)}</div>
-        <div className="calendar-week-tasks">{calendarWeekLayout(current?.tasks ?? [], week[0], week[6]).map(({ task, start, end, column, span, row }) => {
+        <div className="calendar-week-tasks" ref={taskBoard}>{calendarWeekLayout(current?.tasks ?? [], week[0], week[6]).map(({ task, start, end, column, span, row }) => {
           if (!task.subtasks.length && (!task.endDate || task.endDate === task.date)) {
-            return <section className="calendar-week-task-row" key={task.id} aria-label={task.title} style={{ gridColumn: column, gridRow: row }}>
+            return <section className="calendar-week-task-row" key={task.id} aria-label={task.title} data-column={column} data-span={span} style={{ gridColumn: column, gridRow: row }}>
               <div className="calendar-task-group task-color" style={{ "--task-hue": taskHue(task.id) } as CSSProperties}>
                 <label className={`calendar-week-task ${task.done ? "is-complete" : ""}`}>
                   <input type="checkbox" checked={Boolean(task.done)} disabled={busy || loading} aria-label={`${task.title} ${task.done ? "완료 취소" : "완료"}`} onChange={() => void onChange({ op: "task.patch", id: task.id, done: !task.done })} />
@@ -67,7 +88,7 @@ export function PlannerCalendar({ date, data, busy, onSelectDate, onManage, onCh
             </section>;
           }
           const taskEnd = task.endDate ?? task.date;
-          return <section key={task.id} className="calendar-week-family task-color" style={{ "--task-hue": taskHue(task.id), gridColumn: `${column} / span ${span}`, gridRow: row, gridTemplateColumns: `repeat(${span}, minmax(0, 1fr))` } as CSSProperties} aria-label={task.title}>
+          return <section key={task.id} className="calendar-week-family task-color" data-column={column} data-span={span} style={{ "--task-hue": taskHue(task.id), gridColumn: `${column} / span ${span}`, gridRow: row, gridTemplateColumns: `repeat(${span}, minmax(0, 1fr))` } as CSSProperties} aria-label={task.title}>
             <button
               className={`calendar-week-period ${task.done ? "period-done" : ""}`}
               data-joins-start={task.subtasks.some(child => child.date === start)}

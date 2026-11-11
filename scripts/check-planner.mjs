@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
 import { readFileSync, readdirSync } from 'node:fs';
-import { change, readDay, readCalendar, monthRange, syncMilestones, listMilestones, day, addDays, widgetPlan, calendarTaskLanes, calendarWeekLayout, dailyTaskItems, weekRange, calendarTaskGroups, taskHue } from '../lib/planner-core.ts';
+import { change, readDay, readCalendar, monthRange, syncMilestones, listMilestones, day, addDays, widgetPlan, calendarTaskLanes, calendarWeekLayout, calendarWeekOffsets, dailyTaskItems, weekRange, calendarTaskGroups, taskHue } from '../lib/planner-core.ts';
 
 const sqlite = new DatabaseSync(':memory:');
 sqlite.exec('PRAGMA foreign_keys=ON');
@@ -208,4 +208,11 @@ assert.deepEqual(weekPositions([
   { id: 'into-next-week', date: '2026-11-12', endDate: '2026-11-17' },
 ]), [['from-previous-week', 1, 1, 1], ['into-next-week', 4, 4, 1]], 'Period cards clip to the week and reuse unoccupied days');
 console.log('PASS: independent weekly task columns, preserved overlapping order and clipped period cards.');
+assert.deepEqual(calendarWeekOffsets([
+  { column: 1, span: 1, height: 84 }, { column: 3, span: 1, height: 66 },
+  { column: 1, span: 1, height: 66 }, { column: 3, span: 1, height: 66 },
+  { column: 1, span: 2, height: 100 }, { column: 2, span: 1, height: 40 },
+  { column: 3, span: 1, height: 40 },
+]), [0, 0, 92, 74, 166, 274, 148], 'Different card heights pack independently while spanning cards preserve order');
+assert.deepEqual(calendarWeekOffsets([]), []);
 sqlite.close();

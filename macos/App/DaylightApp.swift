@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 @main
@@ -41,8 +42,9 @@ private struct ConnectionView: View {
         .frame(minWidth: 340, alignment: .leading)
         .task { await connection.refresh() }
         .onOpenURL { url in
-            if url == Daylight.openApp, connection.signedIn, let server = connection.server {
-                openURL(server)
+            if url == Daylight.openApp, let server = connection.server,
+               NSWorkspace.shared.open(server) {
+                NSApplication.shared.hide(nil)
             }
         }
     }
