@@ -225,9 +225,8 @@
 .calendar-group-heading strong{flex:1;min-width:0;font-size:12px;line-height:1.5;font-weight:650;overflow-wrap:anywhere}
 .calendar-group-heading>span{font-size:9px;line-height:18px;padding:0 3px;background:#ffffffa8;border-radius:4px;white-space:nowrap;font-variant-numeric:tabular-nums}
 .calendar-group-children,.calendar-group-items{list-style:none}
-.calendar-group-children{margin:8px 0 0 3px;padding-left:8px;border-left:1px solid var(--task-border)}
-.calendar-group-children>li{position:relative;margin:5px 0 0}
-.calendar-group-children>li::before{content:"";position:absolute;left:-9px;top:16px;width:8px;border-top:1px solid var(--task-border)}
+.calendar-group-children{display:flex;flex-direction:column;gap:6px;margin:0;padding:0}
+.calendar-group-children>li{min-width:0}
 .calendar-task-group .calendar-week-task{padding:6px 0;gap:6px}
 .calendar-group-children .calendar-week-task{padding:6px;background:#fafafb;border:1px solid var(--task-border);border-radius:5px}
 .calendar-task-group .calendar-week-task input{accent-color:var(--accent)}
@@ -253,29 +252,32 @@
 .calendar-week-tasks:empty{display:none}
 .calendar-week-tasks.is-compact{grid-auto-rows:1px;row-gap:0}
 .calendar-week-family,.calendar-week-task-row{min-width:0}
-.calendar-week-family{display:grid}
-.calendar-week-family .calendar-week-period{
-  margin:0 2px;
-  padding:9px 10px;
-  min-height:38px;
+.calendar-week-family{
+  display:grid;
+  margin:0 6px 0 2px;
+  border:1px solid var(--task-border);
   border-left:2px solid var(--task-accent);
   border-radius:7px;
-  border:1px solid var(--task-border);
+  background:var(--task-band);
+  overflow:hidden;
 }
-.calendar-week-family .calendar-week-period[data-joins-start="true"]{border-bottom-left-radius:0;border-bottom:0}
-.calendar-week-family .calendar-week-period[data-joins-end="true"]{border-bottom-right-radius:0}
+.calendar-week-family .calendar-week-period{
+  margin:0;
+  padding:9px 10px;
+  min-height:38px;
+  border:0;
+  border-radius:0;
+}
 .calendar-week-family .calendar-week-period:disabled{opacity:1}
 .calendar-week-family .calendar-week-period:disabled>*{opacity:.45}
 .calendar-week-family .calendar-attached-children{
   align-self:start;
-  margin:0 2px;
-  border-top:0;
-  border-radius:0 0 8px 8px;
-  padding:0 7px 8px;
-  border-right:1px solid var(--task-border);
-  border-bottom:1px solid var(--task-border);
+  margin:0;
+  border:0;
+  border-radius:0;
+  padding:0 8px 8px;
+  background:transparent;
 }
-.calendar-attached-children .calendar-group-children{margin-top:0;padding-top:1px}
 
 .calendar-week-task-row .calendar-task-group{margin:0 6px 0 2px}
 

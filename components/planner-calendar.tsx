@@ -78,7 +78,7 @@ export function PlannerCalendar({ date, data, busy, onSelectDate, onManage, onCh
       </div>
       <div className="planner-week-scroll"><div className="planner-week-board" style={{ "--selected-start": `${offset / 7 * 100}%`, "--selected-end": `${(offset + 1) / 7 * 100}%` } as CSSProperties}>
         <div className="calendar-week-dates">{week.map((key, index) => <button key={key} className={`${key === date ? "selected" : ""} ${key === today() ? "actual-today" : ""}`} aria-pressed={key === date} aria-label={dateLabel(key)} disabled={busy || key < "2000-01-01" || key > "2100-09-01"} onClick={() => onSelectDate(key)}><span>{["월", "화", "수", "목", "금", "토", "일"][index]}</span><strong>{Number(key.slice(5, 7))}.{Number(key.slice(8))}</strong></button>)}</div>
-        <div className="calendar-week-tasks" ref={taskBoard}>{calendarWeekLayout(current?.tasks ?? [], week[0], week[6]).map(({ task, start, end, column, span, row }) => {
+        <div className="calendar-week-tasks" ref={taskBoard}>{calendarWeekLayout(current?.tasks ?? [], week[0], week[6]).map(({ task, column, span, row }) => {
           if (!task.subtasks.length && (!task.endDate || task.endDate === task.date)) {
             return <section className="calendar-week-task-row" key={task.id} aria-label={task.title} data-column={column} data-span={span} style={{ gridColumn: column, gridRow: row }}>
               <div className={`calendar-task-group task-color ${task.projectId ? "" : "task-unassigned"}`} style={{ "--task-hue": taskHue(task) } as CSSProperties}>
@@ -94,8 +94,6 @@ export function PlannerCalendar({ date, data, busy, onSelectDate, onManage, onCh
           return <section key={task.id} className={`calendar-week-family task-color ${task.projectId ? "" : "task-unassigned"}`} data-column={column} data-span={span} style={{ "--task-hue": taskHue(task), gridColumn: `${column} / span ${span}`, gridRow: row, gridTemplateColumns: `repeat(${span}, minmax(0, 1fr))` } as CSSProperties} aria-label={task.title}>
             <button
               className={`calendar-week-period ${task.done ? "period-done" : ""}`}
-              data-joins-start={task.subtasks.some(child => child.date === start)}
-              data-joins-end={task.subtasks.some(child => child.date === end)}
               style={{ gridColumn: "1 / -1", gridRow: 1 }}
               disabled={busy}
               onClick={() => onOpenTask(task)}
