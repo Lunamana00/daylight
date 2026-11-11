@@ -189,8 +189,13 @@ export default function Planner({ googleLogin = false }: { googleLogin?: boolean
                 <span className="completion-label"><strong>{completed}</strong> / {dailyItems.length} 완료</span>
               </div>
               <div className="task-progress"><span style={{ width: `${dailyItems.length ? completed / dailyItems.length * 100 : 0}%` }} /></div>
-              <form className="task-composer" onSubmit={async event => {
+              <form className="task-composer" onKeyDown={event => {
+                if (event.key !== "Enter" || !event.metaKey || event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229) return;
                 event.preventDefault();
+                if (!event.repeat && !busy && draft.trim()) event.currentTarget.requestSubmit();
+              }} onSubmit={async event => {
+                event.preventDefault();
+                if (busy || !draft.trim()) return;
                 if (await mutate({ op: "task.add", date: periodStart, endDate: periodEnd === periodStart ? null : periodEnd, title: draft, projectId: draftProject || null }, periodEnd > periodStart ? "기간을 달력에 추가했어요." : undefined)) {
                   setDraft("");
                   setFilter("all");
@@ -202,7 +207,7 @@ export default function Planner({ googleLogin = false }: { googleLogin?: boolean
                 <div className="task-composer-footer"><div className="task-period-fields">
                   <label>시작일<input type="date" value={periodStart} min="2000-01-01" max="2100-09-01" required disabled={busy} onChange={event => { const value = event.target.value; setPeriodStart(value); setPeriodEnd(end => end < value ? value : end); }} /></label>
                   <span>—</span><label>종료일<input type="date" value={periodEnd} min={periodStart} max="2100-09-01" required disabled={busy} onChange={event => setPeriodEnd(event.target.value)} /></label>
-                </div><label className="task-composer-project">프로젝트<select value={draftProject} disabled={busy} onChange={event => setDraftProject(event.target.value)}><option value="">미지정</option>{data.projects?.map(project => <option key={project.id} value={project.id}>{project.title}</option>)}</select></label><button aria-label="할 일 추가" disabled={busy || !draft.trim()}>추가</button></div>
+                </div><label className="task-composer-project">프로젝트<select value={draftProject} disabled={busy} onChange={event => setDraftProject(event.target.value)}><option value="">미지정</option>{data.projects?.map(project => <option key={project.id} value={project.id}>{project.title}</option>)}</select></label><button aria-label="할 일 추가" aria-keyshortcuts="Meta+Enter" title="할 일 추가 (⌘ Enter)" disabled={busy || !draft.trim()}>추가</button></div>
               </form>
               <div className="task-filter" aria-label="할 일 필터">{[["all", "전체"], ["open", "할 일"], ["done", "완료"]].map(([key, label]) => <button key={key} className={filter === key ? "selected" : ""} onClick={() => setFilter(key)}>{label}{key === "done" && <span>{completed}</span>}</button>)}</div>
               {ownFiltered.length ? <ul className="task-list">{ownFiltered.map(task => taskRow(task))}</ul> : <p className="empty-tasks">{myTasks.length ? filter === "done" ? "완료한 할 일 없음" : "남은 할 일 없음" : "할 일 없음"}</p>}

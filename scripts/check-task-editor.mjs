@@ -31,3 +31,34 @@ assert.doesNotMatch(render({}), /aria-label="할 일 제목"/, 'Normal task rows
 assert.doesNotMatch(render({ initialEditing: true, readOnly: true }), /aria-label="할 일 제목"/, 'Read-only tasks cannot open the editor');
 assert.deepEqual(dailyTaskItems([task], task.date), [], 'A period without subtasks stays out of the daily list');
 console.log('Period editor checks passed: direct editing, original dates, subtasks, read-only access, and daily list exclusion.');
+
+const plannerSource = ts.createSourceFile('planner.tsx', readFileSync(new URL('../app/planner.tsx', import.meta.url), 'utf8'), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+let shortcut;
+function findComposer(node) {
+  if (ts.isJsxOpeningElement(node) && node.tagName.getText(plannerSource) === 'form' && node.attributes.properties.some(attr => ts.isJsxAttribute(attr) && attr.name.getText(plannerSource) === 'className' && attr.initializer?.text === 'task-composer')) {
+    shortcut = node.attributes.properties.find(attr => ts.isJsxAttribute(attr) && attr.name.getText(plannerSource) === 'onKeyDown')?.initializer?.expression?.getText(plannerSource);
+  }
+  ts.forEachChild(node, findComposer);
+}
+findComposer(plannerSource);
+assert.ok(shortcut, 'The task form has a keyboard shortcut');
+const handleShortcut = new Function('busy', 'draft', `return (${shortcut});`);
+for (const test of [
+  { name: 'Command Enter', submitted: 1, prevented: 1 },
+  { name: 'Plain Enter keeps a newline', event: { metaKey: false }, submitted: 0, prevented: 0 },
+  { name: 'Another key', event: { key: 'a' }, submitted: 0, prevented: 0 },
+  { name: 'Korean composition', nativeEvent: { isComposing: true }, submitted: 0, prevented: 0 },
+  { name: 'Composition end key', nativeEvent: { keyCode: 229 }, submitted: 0, prevented: 0 },
+  { name: 'Held key', event: { repeat: true }, submitted: 0, prevented: 1 },
+  { name: 'Saving', busy: true, submitted: 0, prevented: 1 },
+  { name: 'Empty title', draft: '  ', submitted: 0, prevented: 1 },
+]) {
+  let submitted = 0, prevented = 0;
+  handleShortcut(test.busy ?? false, test.draft ?? '새 할 일')({
+    key: 'Enter', metaKey: true, repeat: false, ...test.event,
+    nativeEvent: { isComposing: false, keyCode: 13, ...test.nativeEvent },
+    preventDefault() { prevented++; }, currentTarget: { requestSubmit() { submitted++; } },
+  });
+  assert.deepEqual([submitted, prevented], [test.submitted, test.prevented], test.name);
+}
+console.log('Task shortcut checks passed: Command Enter, newlines, Korean composition, held keys, and submission guards.');
