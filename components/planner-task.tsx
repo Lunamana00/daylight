@@ -1,20 +1,22 @@
 "use client";
 
 import { useState, type CSSProperties } from "react";
-import { ArrowRight, Check, FolderOpen, MoreHorizontal, Pencil, Star, Trash2, X } from "lucide-react";
+import { ArrowDown, ArrowRight, ArrowUp, Check, FolderOpen, GripVertical, MoreHorizontal, Pencil, Star, Trash2, X } from "lucide-react";
 import { addDays, taskHue } from "../lib/planner-core";
 import type { Subtask, Task, TaskProject } from "../lib/planner-core";
 
 type Props = {
   task: Task; projects: TaskProject[]; date: string; busy: boolean; readOnly: boolean;
+  previousTaskId?: string; nextTaskId?: string;
   onChange: (input: Record<string, unknown>, message?: string) => Promise<boolean>;
   onDelete: (task: Task, child?: Subtask) => void;
   onOpenWorkLog?: (task: Task) => void;
 };
 const label = (date: string) => `${Number(date.slice(5, 7))}.${Number(date.slice(8))}`;
 
-export function PlannerTask({ task, projects, date, busy, readOnly, onChange, onDelete, onOpenWorkLog }: Props) {
+export function PlannerTask({ task, projects, date, busy, readOnly, previousTaskId, nextTaskId, onChange, onDelete, onOpenWorkLog }: Props) {
   const [menu, setMenu] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
   const [editing, setEditing] = useState(false);
   const [title, setTitle] = useState(task.title);
   const [start, setStart] = useState(task.date);
@@ -24,8 +26,16 @@ export function PlannerTask({ task, projects, date, busy, readOnly, onChange, on
   const [editChild, setEditChild] = useState<Subtask | null>(null);
   const children = task.subtasks;
   const completed = children.filter(child => child.done).length;
+  const move = (targetId?: string) => targetId && onChange({ op: "task.move", id: task.id, targetId, date }, "순서를 변경했어요.");
 
-  return <li className={`task-item task-color ${task.projectId ? "" : "task-unassigned"} ${children.length || task.endDate ? "task-family" : ""}`} style={{ "--task-hue": taskHue(task) } as CSSProperties}>
+  return <li className={`task-item task-color ${task.projectId ? "" : "task-unassigned"} ${children.length || task.endDate ? "task-family" : ""} ${dragOver ? "task-drop-target" : ""}`} style={{ "--task-hue": taskHue(task) } as CSSProperties}
+    onDragOver={event => { if (!readOnly && !busy && event.dataTransfer.types.includes("application/x-daylight-task")) { event.preventDefault(); event.dataTransfer.dropEffect = "move"; setDragOver(true); } }}
+    onDragLeave={event => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDragOver(false); }}
+    onDrop={event => {
+      const id = event.dataTransfer.getData("application/x-daylight-task");
+      setDragOver(false);
+      if (!readOnly && !busy && id) { event.preventDefault(); if (id !== task.id) void onChange({ op: "task.move", id, targetId: task.id, date }, "순서를 변경했어요."); }
+    }}>
     {!readOnly && task.projectId && <div className="task-project-header">
       <label className="task-project-picker"><span className="project-color-dot" aria-hidden="true" /><select aria-label={`${task.title} 프로젝트`} value={task.projectId ?? ""} disabled={busy} onChange={event => void onChange({ op: "task.link", taskId: task.id, artifactId: event.target.value || null })}>
         <option value="">프로젝트 연결 해제</option>{projects.map(project => <option key={project.id} value={project.id}>{project.title}</option>)}
@@ -33,6 +43,10 @@ export function PlannerTask({ task, projects, date, busy, readOnly, onChange, on
       {onOpenWorkLog && <button className="text-button" onClick={() => onOpenWorkLog(task)}><FolderOpen size={12} />기록 보기</button>}
     </div>}
     <div className={`task-row ${task.done ? "is-done" : ""}`}>
+      {!readOnly && !editing && <button className="icon-button task-order-handle" draggable={!busy} disabled={busy}
+        aria-label={`${task.title} 순서 변경, 위아래 방향키로 이동`} title="드래그하거나 ↑ ↓ 키로 순서 변경"
+        onDragStart={event => { event.dataTransfer.setData("application/x-daylight-task", task.id); event.dataTransfer.effectAllowed = "move"; }}
+        onKeyDown={event => { if (event.key === "ArrowUp" || event.key === "ArrowDown") { event.preventDefault(); void move(event.key === "ArrowUp" ? previousTaskId : nextTaskId); } }}><GripVertical size={14} /></button>}
       <button className={`task-check ${task.done ? "checked" : ""}`} disabled={busy || readOnly || children.length > 0}
         onClick={() => void onChange({ op: "task.patch", id: task.id, done: !task.done })}
         aria-label={`${task.title} ${children.length ? `${completed}/${children.length} 완료` : task.done ? "완료 취소" : "완료"}`}
@@ -55,6 +69,8 @@ export function PlannerTask({ task, projects, date, busy, readOnly, onChange, on
         <button className={`icon-button star-button ${task.important ? "starred" : ""}`} aria-label={`${task.title} 중요 표시 ${task.important ? "해제" : "설정"}`} disabled={busy} onClick={() => void onChange({ op: "task.patch", id: task.id, important: !task.important })}><Star size={15} /></button>
         <div className="task-menu-anchor"><button className="icon-button" aria-label={`${task.title} 메뉴`} aria-expanded={menu} onClick={() => setMenu(!menu)}><MoreHorizontal size={18} /></button>
           {menu && <div className="task-menu">
+            <button disabled={busy || !previousTaskId} onClick={async () => { if (await move(previousTaskId)) setMenu(false); }}><ArrowUp size={13} />위로 이동</button>
+            <button disabled={busy || !nextTaskId} onClick={async () => { if (await move(nextTaskId)) setMenu(false); }}><ArrowDown size={13} />아래로 이동</button>
             {onOpenWorkLog && <button onClick={() => { onOpenWorkLog(task); setMenu(false); }}><FolderOpen size={13} />{task.projectId ? "프로젝트·기록 보기" : "프로젝트 연결"}</button>}
             <button onClick={() => { setTitle(task.title); setStart(task.date); setEnd(task.endDate ?? task.date); setEditing(true); setMenu(false); }}><Pencil size={13} />제목·기간 수정</button>
             {!task.endDate && !children.length && <button disabled={busy || date >= "2100-09-01"} onClick={async () => { if (await onChange({ op: "task.patch", id: task.id, date: addDays(date, 1), done: false }, "다음 날 할 일로 옮겼어요.")) setMenu(false); }}><ArrowRight size={13} />다음 날로 옮기기</button>}
@@ -65,7 +81,7 @@ export function PlannerTask({ task, projects, date, busy, readOnly, onChange, on
     </div>
     {(task.endDate || children.length > 0) && <details className="subtasks" open>
       <summary>하위 할 일 <span>{completed} / {children.length}</span></summary>
-      {children.length > 0 && <ul>{children.map(child => <li key={child.id} className={`subtask-row ${child.date === date ? "subtask-today" : ""}`}>
+      {children.length > 0 && <ul>{children.map((child, index) => <li key={child.id} className={`subtask-row ${child.date === date ? "subtask-today" : ""}`}>
         <button className={`task-check ${child.done ? "checked" : ""}`} disabled={busy || readOnly} onClick={() => void onChange({ op: "subtask.patch", id: child.id, done: !child.done })} aria-label={`${child.title} ${child.done ? "완료 취소" : "완료"}`}>
           {child.done ? <Check size={12} strokeWidth={3} /> : null}
         </button>
@@ -78,6 +94,10 @@ export function PlannerTask({ task, projects, date, busy, readOnly, onChange, on
           <button className="text-button" disabled={busy}>저장</button><button type="button" className="icon-button" aria-label="수정 취소" onClick={() => setEditChild(null)}><X size={13} /></button>
         </form> : <>
           <span className={`subtask-title ${child.done ? "subtask-done" : ""}`}>{child.title}</span><time dateTime={child.date}>{label(child.date)}</time>
+          {!readOnly && <span className="subtask-order-actions">
+            <button className="icon-button" aria-label={`${child.title} 위로 이동`} title="위로 이동" disabled={busy || !children[index - 1] || children[index - 1].done !== child.done} onClick={() => void onChange({ op: "subtask.move", id: child.id, targetId: children[index - 1].id, date }, "순서를 변경했어요.")}><ArrowUp size={12} /></button>
+            <button className="icon-button" aria-label={`${child.title} 아래로 이동`} title="아래로 이동" disabled={busy || !children[index + 1] || children[index + 1].done !== child.done} onClick={() => void onChange({ op: "subtask.move", id: child.id, targetId: children[index + 1].id, date }, "순서를 변경했어요.")}><ArrowDown size={12} /></button>
+          </span>}
           {!readOnly && <><button className="icon-button" aria-label={`${child.title} 수정`} disabled={busy} onClick={() => setEditChild({ ...child })}><Pencil size={12} /></button><button className="icon-button" aria-label={`${child.title} 삭제`} disabled={busy} onClick={() => onDelete(task, child)}><Trash2 size={12} /></button></>}
         </>}
       </li>)}</ul>}

@@ -15,6 +15,7 @@ export const tasks = sqliteTable("tasks", {
   title: text("title").notNull(),
   done: integer("done").notNull().default(0),
   important: integer("important").notNull().default(0),
+  sortOrder: integer("sort_order").notNull().default(0),
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
 }, table => [index("tasks_day_owner").on(table.date, table.ownerId)]);
@@ -24,6 +25,7 @@ export const taskSubtasks = sqliteTable("task_subtasks", {
   date: text("date").notNull(),
   title: text("title").notNull(),
   done: integer("done").notNull().default(0),
+  sortOrder: integer("sort_order").notNull().default(0),
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
 }, table => [index("subtasks_parent_date").on(table.taskId, table.date)]);

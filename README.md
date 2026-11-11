@@ -5,6 +5,7 @@ Set your own daily tasks. See what other people plan and complete.
 - **서로의 오늘** shows each person's tasks and completion state.
 - **내 할 일** shows your tasks first and the weekly calendar below them. Add, edit, complete, delete, or move your own tasks to the next day. Select a date in the calendar to show that day's tasks. Other people cannot change your tasks.
 - Set a start date and an end date in the task form. Add dated subtasks under the task. The task appears on each date in its period. Complete each subtask to update total progress.
+- Completed tasks move to the bottom. Drag the handle to change task order. You can also use the arrow keys on the handle or the move commands in the task menu. Use the arrow buttons to move subtasks. The server saves the order. The calendar and Mac widget use this order. If you undo completion, the task returns to its saved position.
 - The calendar opens in **주간** view. It shows task periods above the dated tasks and subtasks. Use the checkboxes to complete them. Select **월간** for a month overview. The calendar shows your Google events and daily tasks. Only your account can read your calendar events. They do not become daily tasks.
 - Google sign-in permits invited accounts only. The Mac widget uses the same account and server.
 
@@ -14,7 +15,9 @@ Select one or more calendars in **설정**. The server reads the selected calend
 
 The Mac widget shows today’s tasks, including subtasks scheduled for today. The header shows the full completion count. Use **Edit Widget** to show or hide Google Calendar events.
 
-See [deployment instructions](deploy/README.md) for Google login, database setup, and Mac installation.
+Download the [Mac installer](https://github.com/Lunamana00/daylight/releases/tag/v1.1.0-beta.1) and follow the [installation guide](docs/mac-install.md). The installer requires macOS 26 or later. It supports Apple Silicon and Intel. You do not need Xcode or a GitHub account. This beta uses a development signature. Apple has not notarized it.
+
+See [deployment instructions](deploy/README.md) for Google login, database setup, and source builds.
 
 ## Work records
 

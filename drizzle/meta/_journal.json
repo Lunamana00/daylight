@@ -57,6 +57,13 @@
       "when": 1794377625287,
       "tag": "0007_work_project_color",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1794382617661,
+      "tag": "0008_task_order",
+      "breakpoints": true
     }
   ]
 }

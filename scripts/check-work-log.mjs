@@ -71,10 +71,12 @@ await assert.rejects(ingestWork(db, connection, { entries: [{ ...record, sourceK
 assert.equal(sqlite.prepare("SELECT count(*) AS n FROM work_entries WHERE source_key='valid-before-invalid'").get().n, 0, 'Invalid batch inserts nothing');
 await assert.rejects(ingestWork(db, connection, { entries: [{ ...record, sourceKey: 'bad-url', links: [{ label: 'Bad', url: 'javascript:alert(1)' }] }] }));
 const plan = { ...record, sourceKey: 'chat/turn/next-action', title: 'Write report', kind: 'plan', plannedTask: { title: 'Write report', date: '2026-11-11', endDate: '2026-11-13' } };
+const lastTaskPosition = sqlite.prepare('SELECT COALESCE(MAX(sort_order),0) AS position FROM tasks WHERE owner_id=?').get(alice.userId).position;
 imported = await ingestWork(db, connection, { entries: [plan] });
 assert.equal(imported.tasksCreated, 1);
 const plannedEntry = sqlite.prepare('SELECT task_id FROM work_entries WHERE id=?').get(imported.records[0].id);
 const taskId = plannedEntry.task_id;
+assert.equal(sqlite.prepare('SELECT sort_order FROM tasks WHERE id=?').get(taskId).sort_order, lastTaskPosition + 1, 'Collected tasks append to the saved order');
 assert.equal(sqlite.prepare('SELECT done FROM tasks WHERE id=?').get(taskId).done, 0);
 await change(db, alice, { op: 'task.patch', id: taskId, done: true });
 await change(db, alice, { op: 'task.patch', id: taskId, done: false });
@@ -210,7 +212,7 @@ await assert.rejects(changeWork(db, alice, { op: 'task.link', taskId: projectTas
 await changeWork(db, alice, { op: 'task.link', taskId: projectTask.id, artifactId: secondProject.id });
 projectPlan = await readDay(db, alice, projectDay);
 assert.equal(projectPlan.tasks.find(task => task.id === projectTask.id).projectId, secondProject.id);
-assert.deepEqual(projectPlan.tasks.map(task => task.id), [projectTask.id, relatedTask.id, unassignedTask.id], 'Project reassignment preserves task order');
+assert.deepEqual(projectPlan.tasks.map(task => task.id), [relatedTask.id, unassignedTask.id, projectTask.id], 'Project reassignment preserves task order with completed tasks last');
 assert.ok((await readWorkDetail(db, alice.userId, artifact.id)).entries.some(entry => entry.taskId === projectTask.id), 'Reassignment preserves earlier project records');
 await changeWork(db, alice, { op: 'task.link', taskId: projectTask.id, artifactId: null });
 assert.equal((await readCalendar(db, alice, projectDay, 'week')).tasks.find(task => task.id === projectTask.id).projectId, null);

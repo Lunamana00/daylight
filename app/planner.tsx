@@ -149,7 +149,9 @@ export default function Planner({ googleLogin = false }: { googleLogin?: boolean
   const connectionPrompt = calendarName.trim() ? `daylight 사이트 ${typeof window !== "undefined" ? window.location.origin : ""}의 연결된 도구를 사용해줘. Google Calendar에서 내가 팀에 공유할 마일스톤용으로 지정하는 캘린더 ${JSON.stringify(calendarName.trim())}만 읽어서, 한국 시간 오늘부터 90일 뒤까지의 마일스톤을 daylight에 동기화해줘. 페이지가 여러 개면 끝까지 읽고 성공한 뒤에만 sync_google_calendar_milestones를 호출해. 이 캘린더 일정이 사이트의 모든 팀원에게 공유되는 것을 허용해. 일정의 원래 ID와 제목을 유지하고, 종일 일정은 start.date, 시간 일정은 한국 시간 시작 날짜를 사용해. Google 캘린더에는 아무것도 쓰지 마. 내가 직접 작성한 일일 할 일은 get_daily_plan으로 읽기만 하고 추가·수정·완료 처리하지 마. 자동 실행은 아직 설정하지 마.` : "";
 
   function taskRow(task: Task, readOnly = false) {
-    return <PlannerTask key={`${date}-${task.id}`} task={task} projects={data?.projects ?? []} date={date} busy={busy} readOnly={readOnly} onChange={mutate} onOpenWorkLog={readOnly ? undefined : task => { setWorkTask(task); setView("work"); }} onDelete={(parent, child) => { setDeleteTask(parent); setDeleteChild(child ?? null); setModal("delete"); }} />;
+    const ordered = (view === "mine" ? ownFiltered : myTasks).filter(item => item.done === task.done);
+    const index = ordered.findIndex(item => item.id === task.id);
+    return <PlannerTask key={`${date}-${task.id}`} task={task} projects={data?.projects ?? []} date={date} busy={busy} readOnly={readOnly} previousTaskId={ordered[index - 1]?.id} nextTaskId={ordered[index + 1]?.id} onChange={mutate} onOpenWorkLog={readOnly ? undefined : task => { setWorkTask(task); setView("work"); }} onDelete={(parent, child) => { setDeleteTask(parent); setDeleteChild(child ?? null); setModal("delete"); }} />;
   }
 
   return <div className="app-shell">

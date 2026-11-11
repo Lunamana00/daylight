@@ -232,7 +232,7 @@ export async function ingestWork(db: D1Database, connection: CollectorConnection
       // A fresh entry ID gates every side effect, including retries after a task was deleted.
       taskIndexes.push(statements.length);
       statements.push(
-        db.prepare("INSERT INTO tasks (id,owner_id,date,end_date,title,done,important,created_at,updated_at) SELECT ?,?,?,?,?,0,0,?,? WHERE EXISTS (SELECT 1 FROM work_entries WHERE id=?)").bind(taskId, connection.ownerId, date, end, title, now, now, id),
+        db.prepare("INSERT INTO tasks (id,owner_id,date,end_date,title,done,important,created_at,updated_at,sort_order) SELECT ?,?,?,?,?,0,0,?,?,(SELECT COALESCE(MAX(sort_order),0)+1 FROM tasks WHERE owner_id=?) WHERE EXISTS (SELECT 1 FROM work_entries WHERE id=?)").bind(taskId, connection.ownerId, date, end, title, now, now, connection.ownerId, id),
         db.prepare("INSERT INTO work_task_links (task_id,artifact_id,stage_id) SELECT ?,?,? WHERE EXISTS (SELECT 1 FROM work_entries WHERE id=?)").bind(taskId, link.artifactId, link.stageId, id),
         db.prepare("UPDATE work_entries SET task_id=? WHERE id=? AND owner_id=?").bind(taskId, id, connection.ownerId),
       );

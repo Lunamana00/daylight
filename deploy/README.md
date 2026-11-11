@@ -65,6 +65,10 @@ Google refresh tokens expire after seven days when the OAuth app is in Testing. 
 
 ## Install the Mac widget
 
+Use the [Mac installer and installation guide](../docs/mac-install.md) for the prebuilt app. This beta requires macOS 26 or later. Apple has not notarized it. A first launch can require approval in **System Settings > Privacy & Security**.
+
+To build the app from source:
+
 1. Install Xcode 26 or later. Open `macos/Daylight.xcodeproj` in Xcode.
 2. Select the same Apple signing team for **Daylight** and **DaylightWidget**. Set `DAYLIGHT_SERVER_URL` in the **Daylight** build settings to the Google Worker origin.
 3. Run **Daylight**. Select **Google로 로그인** and use an invited account.
@@ -75,3 +79,21 @@ The widget shows up to four tasks scheduled for today. This includes dated subta
 Open **작업물** and select a project. Select a color below its name, or select **자동** for its default color. Linked tasks and subtasks use this color in the web planner and Mac widget. The widget also shows the project name.
 
 The refresh button runs in the Mac app and updates the connected calendars and daily tasks. The button does not write to Google Calendar. Calendar credentials stay on the server.
+
+## Package the Mac beta
+
+Use a valid Apple development signing identity for the configured team. The following command builds both Mac architectures. It disables debugger access in the release signature.
+
+```sh
+xcodebuild -project macos/Daylight.xcodeproj -scheme Daylight \
+  -configuration Release -destination 'generic/platform=macOS' \
+  -derivedDataPath outputs/macos-release \
+  ARCHS='arm64 x86_64' ONLY_ACTIVE_ARCH=NO \
+  ENABLE_HARDENED_RUNTIME=YES CODE_SIGN_INJECT_BASE_ENTITLEMENTS=NO build
+```
+
+Copy only `outputs/macos-release/Build/Products/Release/daylight.app` into the disk image. Use `ditto` to preserve the app bundle. Add a link to `/Applications` and the installation guide. Do not include local caches or login data. Upload the disk image and its SHA-256 checksum to a GitHub prerelease.
+
+The app stores its session in the file-based Keychain. The widget receives display data through the app group. It does not receive the session. This beta does not require a device provisioning profile. An update from an older development build requires Google sign-in again.
+
+A notarized release requires Developer ID signing and Apple notarization. See [Apple distribution signing](https://developer.apple.com/documentation/xcode/creating-distribution-signed-code-for-the-mac) and [Mac Keychain implementations](https://developer.apple.com/documentation/technotes/tn3137-on-mac-keychains).

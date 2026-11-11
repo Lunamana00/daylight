@@ -14,7 +14,8 @@ enum SessionVault {
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: "com.lunamana.daylight",
             kSecAttrAccount as String: server.absoluteString,
-            kSecUseDataProtectionKeychain as String: true,
+            // The file-based Keychain does not require a device provisioning profile.
+            kSecUseDataProtectionKeychain as String: false,
         ]
     }
 
@@ -37,7 +38,6 @@ enum SessionVault {
         if updated == errSecSuccess { return }
         guard updated == errSecItemNotFound else { throw DaylightError.keychain }
         attributes[kSecValueData as String] = data
-        attributes[kSecAttrAccessible as String] = kSecAttrAccessibleWhenUnlockedThisDeviceOnly
         guard SecItemAdd(attributes as CFDictionary, nil) == errSecSuccess else { throw DaylightError.keychain }
     }
 

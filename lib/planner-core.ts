@@ -1,8 +1,8 @@
 // Site-admitted members share reads; writes always use the authenticated owner.
 export type Identity = { userId: string; email: string; fullName?: string | null };
 export type Member = { id: string; name: string };
-export type Subtask = { id: string; taskId: string; date: string; title: string; done: number };
-export type Task = { id: string; ownerId: string; date: string; endDate: string | null; title: string; done: number; important: number; createdAt: string; updatedAt: string; ownerName: string; subtasks: Subtask[]; projectId?: string | null; projectTitle?: string | null; projectHue?: number | null };
+export type Subtask = { id: string; taskId: string; date: string; title: string; done: number; sortOrder: number };
+export type Task = { id: string; ownerId: string; date: string; endDate: string | null; title: string; done: number; important: number; sortOrder: number; createdAt: string; updatedAt: string; ownerName: string; subtasks: Subtask[]; projectId?: string | null; projectTitle?: string | null; projectHue?: number | null };
 export type TaskProject = { id: string; title: string };
 export type Note = { ownerId: string; date: string; content: string; updatedAt: string; ownerName: string };
 export type Milestone = { ownerId: string; calendarId: string; eventId: string; title: string; date: string; url: string | null; ownerName: string; sourceName: string; syncedAt: string };
@@ -43,8 +43,8 @@ export async function ensureMember(db: D1Database, user: Identity) {
 async function readTasks(db: D1Database, from: string, to: string, ownerId: string | null = null, projectOwnerId = ownerId): Promise<Task[]> {
   const where = "t.date<=? AND COALESCE(t.end_date,t.date)>=? AND (? IS NULL OR t.owner_id=?)";
   const [tasks, children] = await Promise.all([
-    db.prepare(`SELECT t.id,t.owner_id AS ownerId,t.date,t.end_date AS endDate,t.title,t.done,t.important,t.created_at AS createdAt,t.updated_at AS updatedAt,p.name AS ownerName,a.id AS projectId,a.title AS projectTitle,a.color_hue AS projectHue FROM tasks t JOIN members p ON p.id=t.owner_id LEFT JOIN work_task_links l ON l.task_id=t.id LEFT JOIN work_artifacts a ON a.id=l.artifact_id AND a.owner_id=t.owner_id AND a.owner_id=? WHERE ${where} ORDER BY t.created_at,t.rowid`).bind(projectOwnerId, to, from, ownerId, ownerId).all<Task>(),
-    db.prepare(`SELECT s.id,s.task_id AS taskId,s.date,s.title,s.done FROM task_subtasks s JOIN tasks t ON t.id=s.task_id WHERE ${where} ORDER BY s.date,s.created_at,s.rowid`).bind(to, from, ownerId, ownerId).all<Subtask>(),
+    db.prepare(`SELECT t.id,t.owner_id AS ownerId,t.date,t.end_date AS endDate,t.title,t.done,t.important,t.sort_order AS sortOrder,t.created_at AS createdAt,t.updated_at AS updatedAt,p.name AS ownerName,a.id AS projectId,a.title AS projectTitle,a.color_hue AS projectHue FROM tasks t JOIN members p ON p.id=t.owner_id LEFT JOIN work_task_links l ON l.task_id=t.id LEFT JOIN work_artifacts a ON a.id=l.artifact_id AND a.owner_id=t.owner_id AND a.owner_id=? WHERE ${where} ORDER BY t.sort_order,t.created_at,t.rowid`).bind(projectOwnerId, to, from, ownerId, ownerId).all<Task>(),
+    db.prepare(`SELECT s.id,s.task_id AS taskId,s.date,s.title,s.done,s.sort_order AS sortOrder FROM task_subtasks s JOIN tasks t ON t.id=s.task_id WHERE ${where} ORDER BY s.done,s.sort_order,s.created_at,s.rowid`).bind(to, from, ownerId, ownerId).all<Subtask>(),
   ]);
   const grouped = new Map<string, Subtask[]>();
   for (const child of children.results) {
@@ -54,7 +54,7 @@ async function readTasks(db: D1Database, from: string, to: string, ownerId: stri
   return tasks.results.map(task => {
     const subtasks = grouped.get(task.id) ?? [];
     return { ...task, subtasks, done: subtasks.length ? Number(subtasks.every(child => child.done)) : task.done };
-  });
+  }).sort((a, b) => a.done - b.done);
 }
 export function dailyTaskItems(tasks: Task[], date: string): Array<{ id: string; title: string; done: boolean; parentTitle: string | null; subtask: boolean }> {
   return tasks.flatMap<{ id: string; title: string; done: boolean; parentTitle: string | null; subtask: boolean }>(task => task.subtasks.length
@@ -62,16 +62,15 @@ export function dailyTaskItems(tasks: Task[], date: string): Array<{ id: string;
     : task.date <= date && (task.endDate ?? task.date) >= date
       ? [{ id: task.id, title: task.title, done: Boolean(task.done), parentTitle: null, subtask: false }]
       : []
-  );
+  ).sort((a, b) => Number(a.done) - Number(b.done));
 }
 export function calendarTaskLanes(tasks: Task[], from: string, to: string): Task[][] {
-  const periods = tasks.filter(task => task.endDate && task.endDate > task.date && task.date <= to && task.endDate >= from)
-    .sort((a, b) => a.date.localeCompare(b.date) || b.endDate!.localeCompare(a.endDate!) || a.id.localeCompare(b.id));
+  const periods = tasks.filter(task => task.endDate && task.endDate > task.date && task.date <= to && task.endDate >= from);
   const lanes: Task[][] = [];
   for (const task of periods) {
-    const lane = lanes.find(items => items[items.length - 1].endDate! < task.date);
-    if (lane) lane.push(task);
-    else lanes.push([task]);
+    // Overlapping bars follow the same saved order as the task list.
+    const index = lanes.findLastIndex(items => items.some(item => item.date <= task.endDate! && item.endDate! >= task.date)) + 1;
+    (lanes[index] ??= []).push(task);
   }
   return lanes;
 }
@@ -130,7 +129,7 @@ export function widgetPlan(data: DayData) {
       ...item, projectTitle: task.projectId ? task.projectTitle ?? null : null,
       projectHue: task.projectId ? taskHue(task) : null,
     }))
-  );
+  ).sort((a, b) => Number(a.done) - Number(b.done));
   const next = data.milestones[0];
   return {
     date: data.date, accountID: data.me.id,
@@ -179,6 +178,25 @@ export async function readCalendar(db: D1Database, user: Identity, date: string,
 export async function change(db: D1Database, user: Identity, input: Record<string, unknown>, taskDate?: string) {
   await ensureMember(db, user);
   const now = new Date().toISOString();
+  if (input.op === "task.move" || input.op === "subtask.move") {
+    const id = text(input.id, "할 일 ID", 100), targetId = text(input.targetId, "이동할 위치", 100);
+    const date = day(input.date);
+    const tasks = await readTasks(db, date, date, user.userId);
+    const isChild = input.op === "subtask.move";
+    const siblings = isChild ? tasks.find(task => task.subtasks.some(child => child.id === id))?.subtasks ?? [] : tasks;
+    const source = siblings.find(item => item.id === id), target = siblings.find(item => item.id === targetId);
+    if (!source || !target) throw new PlannerError("같은 목록에 있는 본인의 할 일만 옮길 수 있어요.", 403);
+    if (source.done !== target.done) throw new PlannerError("완료한 할 일은 목록 아래에 표시됩니다.", 409);
+    if (id === targetId) return { saved: true };
+    const ordered = siblings.filter(item => item.done === source.done);
+    const positions = ordered.map(item => item.sortOrder);
+    const from = ordered.findIndex(item => item.id === id), to = ordered.findIndex(item => item.id === targetId);
+    ordered.splice(to, 0, ordered.splice(from, 1)[0]);
+    await db.batch(ordered.map((item, index) => isChild
+      ? db.prepare("UPDATE task_subtasks SET sort_order=?,updated_at=? WHERE id=? AND task_id IN (SELECT id FROM tasks WHERE owner_id=?)").bind(positions[index], now, item.id, user.userId)
+      : db.prepare("UPDATE tasks SET sort_order=?,updated_at=? WHERE id=? AND owner_id=?").bind(positions[index], now, item.id, user.userId)));
+    return { saved: true };
+  }
   if (input.op === "milestones.reorder") {
     const date = day(input.date);
     if (!Array.isArray(input.order) || input.order.length > 1000) throw new PlannerError("올바른 마일스톤 순서가 아닙니다.");
@@ -200,7 +218,7 @@ export async function change(db: D1Database, user: Identity, input: Record<strin
     if (endDate && endDate < date) throw new PlannerError("종료일은 시작일 이후로 선택해주세요.");
     const projectId = input.projectId == null ? null : text(input.projectId, "프로젝트", 100);
     if (projectId && !(await db.prepare("SELECT id FROM work_artifacts WHERE id=? AND owner_id=?").bind(projectId, user.userId).all()).results.length) throw new PlannerError("본인의 프로젝트를 선택해 주세요.", 403);
-    const statements = [db.prepare("INSERT INTO tasks (id,owner_id,date,end_date,title,done,important,created_at,updated_at) VALUES (?,?,?,?,?,0,?,?,?)").bind(id, user.userId, date, endDate, text(input.title, "할 일", 240), input.important === undefined ? 0 : bool(input.important), now, now)];
+    const statements = [db.prepare("INSERT INTO tasks (id,owner_id,date,end_date,title,done,important,created_at,updated_at,sort_order) VALUES (?,?,?,?,?,0,?,?,?,(SELECT COALESCE(MAX(sort_order),0)+1 FROM tasks WHERE owner_id=?))").bind(id, user.userId, date, endDate, text(input.title, "할 일", 240), input.important === undefined ? 0 : bool(input.important), now, now, user.userId)];
     if (projectId) statements.push(db.prepare("INSERT INTO work_task_links (task_id,artifact_id) VALUES (?,?)").bind(id, projectId));
     await db.batch(statements);
     return { id };
@@ -221,7 +239,7 @@ export async function change(db: D1Database, user: Identity, input: Record<strin
     if (date < task.date || date > (task.endDate ?? task.date)) throw new PlannerError("하위 할 일의 날짜는 전체 할 일 기간 안에서 선택해주세요.");
     let result;
     if (adding) {
-      result = await db.prepare("INSERT INTO task_subtasks (id,task_id,date,title,done,created_at,updated_at) SELECT ?,id,?,?,0,?,? FROM tasks WHERE id=? AND owner_id=? AND ? BETWEEN date AND COALESCE(end_date,date)").bind(id, date, text(input.title, "하위 할 일", 240), now, now, task.id, user.userId, date).run();
+      result = await db.prepare("INSERT INTO task_subtasks (id,task_id,date,title,done,created_at,updated_at,sort_order) SELECT ?,id,?,?,0,?,?,(SELECT COALESCE(MAX(sort_order),0)+1 FROM task_subtasks WHERE task_id=tasks.id) FROM tasks WHERE id=? AND owner_id=? AND ? BETWEEN date AND COALESCE(end_date,date)").bind(id, date, text(input.title, "하위 할 일", 240), now, now, task.id, user.userId, date).run();
     } else {
       const fields = ["updated_at=?"];
       const values: (string | number)[] = [now];

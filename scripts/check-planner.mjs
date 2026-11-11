@@ -3,6 +3,23 @@ import { DatabaseSync } from 'node:sqlite';
 import { readFileSync, readdirSync } from 'node:fs';
 import { change, readDay, readCalendar, monthRange, syncMilestones, listMilestones, day, addDays, widgetPlan, calendarTaskLanes, calendarWeekLayout, calendarWeekOffsets, dailyTaskItems, weekRange, calendarTaskGroups, taskHue } from '../lib/planner-core.ts';
 
+const previous = new DatabaseSync(':memory:');
+const migrations = readdirSync(new URL('../drizzle/', import.meta.url)).filter(name => name.endsWith('.sql')).sort();
+for (const file of migrations.filter(name => name < '0008_task_order.sql')) previous.exec(readFileSync(new URL('../drizzle/' + file, import.meta.url), 'utf8'));
+previous.exec(`INSERT INTO members VALUES ('migration-owner','Owner','owner@example.test','2040-01-01');
+  INSERT INTO tasks (id,owner_id,date,title,done,created_at,updated_at) VALUES
+    ('older','migration-owner','2040-01-02','Keep completed task',1,'2040-01-01','2040-01-01'),
+    ('newer','migration-owner','2040-01-01','Keep parent',0,'2040-01-02','2040-01-02');
+  INSERT INTO task_subtasks (id,task_id,date,title,created_at,updated_at) VALUES
+    ('later-child','newer','2040-01-02','Later date','2040-01-01','2040-01-01'),
+    ('earlier-child','newer','2040-01-01','Earlier date','2040-01-02','2040-01-02');`);
+const savedTasks = previous.prepare('SELECT id,title,date,done FROM tasks ORDER BY id').all();
+previous.exec(readFileSync(new URL('../drizzle/0008_task_order.sql', import.meta.url), 'utf8'));
+assert.deepEqual(previous.prepare('SELECT id,title,date,done FROM tasks ORDER BY id').all(), savedTasks, 'Order migration preserves existing task data');
+assert.deepEqual(previous.prepare('SELECT id FROM tasks ORDER BY sort_order').all().map(row => row.id), ['older', 'newer']);
+assert.deepEqual(previous.prepare('SELECT id FROM task_subtasks ORDER BY sort_order').all().map(row => row.id), ['earlier-child', 'later-child'], 'Order migration retains the previous dated subtask order');
+previous.close();
+
 const sqlite = new DatabaseSync(':memory:');
 sqlite.exec('PRAGMA foreign_keys=ON');
 for (const file of readdirSync(new URL('../drizzle/', import.meta.url)).filter(name => name.endsWith('.sql')).sort()) sqlite.exec(readFileSync(new URL('../drizzle/' + file, import.meta.url), 'utf8'));
@@ -138,8 +155,9 @@ const spans = [
   { id: 'daily', date: '2030-02-01', endDate: null },
 ];
 const laneIds = tasks => calendarTaskLanes(tasks, '2030-01-28', '2030-02-03').map(lane => lane.map(task => task.id));
-assert.deepEqual(laneIds(spans), [['a', 'c'], ['b']], 'Overlapping periods keep separate rows and non-overlapping periods reuse a row');
-assert.deepEqual(laneIds([...spans].reverse()), laneIds(spans), 'Row placement does not depend on completion ordering');
+assert.deepEqual(laneIds(spans), [['a'], ['b'], ['c']], 'Overlapping periods follow the saved task order');
+assert.deepEqual(laneIds([...spans].reverse()), [['c'], ['b'], ['a']], 'Reordered periods keep their order in the month view');
+assert.deepEqual(laneIds([spans[0], spans[2]]), [['a', 'c']], 'Non-overlapping periods reuse a row');
 assert.deepEqual(calendarTaskLanes(spans, '2030-02-01', '2030-02-03').map(lane => lane.map(task => task.id)), [['b'], ['c']], 'A period continues across the month edge');
 console.log('PASS: continuous calendar lanes, overlap placement and month edges.');
 assert.deepEqual(weekRange('2026-12-01'), { from: '2026-11-30', to: '2026-12-06' });
@@ -184,12 +202,45 @@ assert.deepEqual((await readDay(db, alice, orderedDate)).tasks.map(task => task.
 await change(db, alice, { op: 'task.patch', id: orderOne.id, done: true });
 await change(db, alice, { op: 'task.patch', id: orderTwo.id, important: true });
 await change(db, alice, { op: 'subtask.patch', id: orderChild.id, done: true });
-assert.deepEqual((await readDay(db, alice, orderedDate)).tasks.map(task => task.id), expectedOrder, 'Completion and importance do not move the third task');
-assert.deepEqual((await readCalendar(db, alice, orderedDate, 'week')).tasks.map(task => task.id), expectedOrder, 'Weekly calendar uses the same order for single and multi-day tasks');
+const completedLast = [orderTwo.id, orderOne.id, orderThree.id];
+assert.deepEqual((await readDay(db, alice, orderedDate)).tasks.map(task => task.id), completedLast, 'Completed tasks and completed parents go to the bottom');
+assert.deepEqual((await readCalendar(db, alice, orderedDate, 'week')).tasks.map(task => task.id), completedLast, 'Weekly calendar uses the same order for single and multi-day tasks');
 await change(db, alice, { op: 'task.patch', id: orderTwo.id, date: '2040-06-05' });
-assert.deepEqual((await readCalendar(db, alice, '2040-06-05', 'week')).tasks.map(task => task.id), expectedOrder, 'Changing a date preserves the stored task order');
-assert.deepEqual(dailyTaskItems(sameTitleTasks, '2026-12-01').map(item => item.id), ['a1', 'a2', 'b1'], 'Completed children keep their place');
-console.log('PASS: fixed task order across completion, importance, date changes and weekly refreshes.');
+assert.deepEqual((await readCalendar(db, alice, '2040-06-05', 'week')).tasks.map(task => task.id), completedLast, 'Changing a date preserves the stored task order');
+assert.deepEqual(dailyTaskItems(sameTitleTasks, '2026-12-01').map(item => item.id), ['a1', 'b1', 'a2'], 'Completed daily items go below all unfinished items');
+await change(db, alice, { op: 'task.patch', id: orderOne.id, done: false });
+await change(db, alice, { op: 'subtask.patch', id: orderChild.id, done: false });
+await change(db, alice, { op: 'task.patch', id: orderTwo.id, date: orderedDate });
+assert.deepEqual((await readDay(db, alice, orderedDate)).tasks.map(task => task.id), expectedOrder, 'Undo completion restores the saved position');
+await change(db, alice, { op: 'task.move', id: orderThree.id, targetId: orderOne.id, date: orderedDate });
+const movedOrder = [orderThree.id, orderOne.id, orderTwo.id];
+assert.deepEqual((await readDay(db, alice, orderedDate)).tasks.map(task => task.id), movedOrder, 'Move inserts the parent at the requested position');
+assert.deepEqual((await readCalendar(db, alice, orderedDate, 'week')).tasks.map(task => task.id), movedOrder, 'Manual order persists in calendar reads');
+const orderFour = await change(db, alice, { op: 'task.add', date: orderedDate, title: 'New task at end' });
+assert.deepEqual((await readDay(db, alice, orderedDate)).tasks.map(task => task.id), [...movedOrder, orderFour.id]);
+const secondChild = await change(db, alice, { op: 'subtask.add', taskId: orderThree.id, date: orderedDate, title: 'Second child' });
+await change(db, alice, { op: 'subtask.move', id: secondChild.id, targetId: orderChild.id, date: orderedDate });
+const readChildren = async () => (await readDay(db, alice, orderedDate)).tasks.find(task => task.id === orderThree.id).subtasks.map(child => child.id);
+assert.deepEqual(await readChildren(), [secondChild.id, orderChild.id]);
+await change(db, alice, { op: 'subtask.patch', id: secondChild.id, done: true });
+assert.deepEqual(await readChildren(), [orderChild.id, secondChild.id], 'Completed subtasks move to the bottom within their parent');
+await assert.rejects(change(db, alice, { op: 'subtask.move', id: secondChild.id, targetId: orderChild.id, date: orderedDate }), error => error.status === 409);
+await change(db, alice, { op: 'subtask.patch', id: secondChild.id, done: false });
+assert.deepEqual(await readChildren(), [secondChild.id, orderChild.id], 'Undo subtask completion restores its manual order');
+const foreignTask = await change(db, bob, { op: 'task.add', date: orderedDate, title: 'Private write permission' });
+for (const [id, targetId] of [[orderOne.id, foreignTask.id], [foreignTask.id, orderOne.id]]) {
+  await assert.rejects(change(db, alice, { op: 'task.move', id, targetId, date: orderedDate }), error => error.status === 403);
+}
+const otherChild = await change(db, alice, { op: 'subtask.add', taskId: orderFour.id, date: orderedDate, title: 'Other parent child' });
+await assert.rejects(change(db, alice, { op: 'subtask.move', id: secondChild.id, targetId: otherChild.id, date: orderedDate }), error => error.status === 403);
+await change(db, alice, { op: 'task.patch', id: orderOne.id, done: true });
+await assert.rejects(change(db, alice, { op: 'task.move', id: orderOne.id, targetId: orderTwo.id, date: orderedDate }), error => error.status === 409);
+await change(db, alice, { op: 'subtask.patch', id: secondChild.id, done: true });
+const orderedWidget = widgetPlan(await readDay(db, alice, orderedDate));
+assert.deepEqual(orderedWidget.tasks.map(item => item.id), [orderChild.id, orderTwo.id, otherChild.id, secondChild.id], 'Widget fills unfinished rows before completed children');
+assert.equal(orderedWidget.taskCount, 5);
+assert.equal(orderedWidget.completedCount, 2);
+console.log('PASS: saved task and subtask order, completion sorting, undo, calendar/widget order and owner-only moves.');
 const weekPositions = tasks => calendarWeekLayout(tasks, '2026-11-09', '2026-11-15').map(({ task, column, span, row }) => [task.id, column, span, row]);
 assert.deepEqual(weekPositions([
   { id: 'mon-first', date: '2026-11-09', endDate: null },

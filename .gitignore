@@ -33,7 +33,7 @@ yarn-error.log*
 *.pem
 
 # Checkout-local tool state
-/.wrangler/
+**/.wrangler/
 /.sites-runtime/
 
 # Workspace scaffolding and publication archives
