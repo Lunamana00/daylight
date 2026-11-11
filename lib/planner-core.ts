@@ -56,6 +56,9 @@ async function readTasks(db: D1Database, from: string, to: string, ownerId: stri
     return { ...task, subtasks, done: subtasks.length ? Number(subtasks.every(child => child.done)) : task.done };
   }).sort((a, b) => a.done - b.done);
 }
+export async function readTaskCatalog(db: D1Database, user: Identity) {
+  return readTasks(db, "2000-01-01", "2100-12-31", user.userId);
+}
 export function dailyTaskItems(tasks: Task[], date: string): Array<{ id: string; title: string; done: boolean; parentTitle: string | null; subtask: boolean }> {
   return tasks.flatMap<{ id: string; title: string; done: boolean; parentTitle: string | null; subtask: boolean }>(task => task.subtasks.length
     ? task.subtasks.filter(child => child.date === date).map(child => ({ id: child.id, title: child.title, done: Boolean(child.done), parentTitle: task.title, subtask: true }))

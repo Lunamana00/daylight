@@ -1,6 +1,6 @@
 import { env } from "cloudflare:workers";
 import { getDaylightSession } from "../../identity";
-import { change, day, PlannerError, readDay, readCalendar, today, widgetPlan } from "../../../lib/planner-core";
+import { change, day, PlannerError, readDay, readCalendar, readTaskCatalog, today, widgetPlan } from "../../../lib/planner-core";
 import { calendarSyncStatus, syncSavedGoogleCalendars } from "../../../lib/google-auth";
 
 export const dynamic = "force-dynamic";
@@ -18,6 +18,9 @@ export async function GET(request: Request) {
     if (!env.DB) throw new Error("Missing DB");
     const date = session.client === "mac" ? today() : day(new URL(request.url).searchParams.get("date") || today());
     const view = new URL(request.url).searchParams.get("view");
+    if (session.client !== "mac" && view === "tasks") {
+      return Response.json({ tasks: await readTaskCatalog(env.DB, session.user) }, { headers });
+    }
     if (session.client !== "mac" && (view === "month" || view === "week")) {
       return Response.json(await readCalendar(env.DB, session.user, date, view), { headers });
     }
