@@ -104,10 +104,11 @@ export function taskHue(task: string | Pick<Task, "id" | "projectId">) {
   return [148, 218, 278, 28, 328, 178, 55, 245][hash % 8];
 }
 export function calendarProjects(tasks: Task[]) {
-  const groups = new Map<string, { id: string | null; title: string; total: number; completed: number }>();
+  const groups = new Map<string, { id: string; title: string; total: number; completed: number }>();
   for (const task of tasks) {
-    const key = task.projectId ?? "";
-    const group = groups.get(key) ?? { id: task.projectId ?? null, title: task.projectTitle ?? "프로젝트 미지정", total: 0, completed: 0 };
+    if (!task.projectId) continue;
+    const key = task.projectId;
+    const group = groups.get(key) ?? { id: key, title: task.projectTitle ?? "프로젝트", total: 0, completed: 0 };
     group.total += 1;
     group.completed += Number(Boolean(task.done));
     groups.set(key, group);
@@ -119,7 +120,12 @@ export function calendarTaskGroups(tasks: Task[], date: string) {
     .filter(({ task, items }) => items.length > 0 && (task.subtasks.length > 0 || !task.endDate || task.endDate === task.date));
 }
 export function widgetPlan(data: DayData) {
-  const items = dailyTaskItems(data.tasks.filter(task => task.ownerId === data.me.id), data.date);
+  const items = data.tasks.filter(task => task.ownerId === data.me.id).flatMap(task =>
+    dailyTaskItems([task], data.date).map(item => ({
+      ...item, projectTitle: task.projectId ? task.projectTitle ?? null : null,
+      projectHue: task.projectId ? taskHue(task) : null,
+    }))
+  );
   const next = data.milestones[0];
   return {
     date: data.date, accountID: data.me.id,

@@ -71,11 +71,34 @@ struct DaylightWidgetView: View {
                     Text("오늘 할 일 없음").font(.caption).foregroundStyle(.secondary)
                 } else {
                     ForEach(snapshot.tasks) { task in
+                        // Match the web's HSL accent (38%, 43%) using SwiftUI's HSB initializer.
+                        let projectColor = task.projectHue.map {
+                            Color(hue: $0 / 360, saturation: (2 * 0.38) / (1 + 0.38), brightness: 0.43 * (1 + 0.38))
+                        } ?? Color.secondary
                         Toggle(isOn: task.done, intent: SetDaylightTaskDone(task: task, snapshot: snapshot)) {
-                            Text((task.parentTitle.map { "\($0) · " } ?? "") + task.title)
-                                .lineLimit(1).strikethrough(task.done)
+                            HStack(spacing: 6) {
+                                Text((task.parentTitle.map { "\($0) · " } ?? "") + task.title)
+                                    .lineLimit(1).strikethrough(task.done)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                if let project = task.projectTitle {
+                                    HStack(spacing: 4) {
+                                        Image(systemName: "circle.fill")
+                                            .symbolRenderingMode(.palette)
+                                            .widgetAccentedRenderingMode(.fullColor)
+                                            .font(.system(size: 6))
+                                            .accessibilityHidden(true)
+                                        Text(project).lineLimit(1)
+                                    }
+                                    .font(.system(size: 9, weight: .medium))
+                                    .foregroundStyle(projectColor)
+                                    .frame(maxWidth: 88, alignment: .trailing)
+                                    .help(project)
+                                    .accessibilityLabel("프로젝트 \(project)")
+                                }
+                            }
                         }
                         .toggleStyle(.checkbox).font(.caption).privacySensitive()
+                        .tint(projectColor)
                         .disabled(snapshot.accountID.isEmpty)
                     }
                 }

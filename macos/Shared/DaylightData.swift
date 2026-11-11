@@ -39,6 +39,8 @@ struct DaylightTask: Codable, Equatable, Identifiable {
     let done: Bool
     var parentTitle: String? = nil
     var subtask: Bool? = nil
+    var projectTitle: String? = nil
+    var projectHue: Double? = nil
 }
 
 struct DaylightMilestone: Codable, Equatable {

@@ -182,7 +182,7 @@ export function PlannerCalendar({ date, data, busy, onSelectDate, onManage, onCh
       } }}
     />}
     {projectGroups.length > 0 && <section className="calendar-projects" aria-label={`${view === "week" ? "이번 주" : "이번 달"} 프로젝트별 할 일`}>
-      <h3>프로젝트</h3><ul>{projectGroups.map(project => <li key={project.id ?? "unassigned"} className={`task-color ${project.id ? "" : "task-unassigned"}`} style={{ "--task-hue": taskHue(project.id ?? "unassigned") } as CSSProperties}>
+      <h3>프로젝트</h3><ul>{projectGroups.map(project => <li key={project.id} className="task-color" style={{ "--task-hue": taskHue(project.id) } as CSSProperties}>
         <span className="project-color-dot" aria-hidden="true" /><span className="calendar-project-name">{project.title}</span><small>{project.completed}/{project.total} 완료</small>
         <progress max={project.total} value={project.completed} aria-label={`${project.title} 할 일 ${project.total}개 중 ${project.completed}개 완료`} />
       </li>)}</ul>
