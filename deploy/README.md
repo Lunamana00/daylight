@@ -63,6 +63,18 @@ The server encrypts Google refresh tokens with a key derived from `GOOGLE_CLIENT
 
 Google refresh tokens expire after seven days when the OAuth app is in Testing. Connect the calendars again when daylight shows **Google 다시 연결 필요**. Production OAuth configuration can require Google verification. The daylight account invite list controls access separately.
 
+## GitHub record storage
+
+Apply migration `0009_work_github.sql` to the Google D1 database once. Set `WORK_GITHUB_KEY` as a Worker secret. Use a random value with at least 32 characters. Do not store the value in a file tracked by Git.
+
+```sh
+npx wrangler secret put WORK_GITHUB_KEY --config deploy/wrangler.google.jsonc
+```
+
+Keep this key stable. The Worker uses it to encrypt project connection tokens. If you replace the key, each project must reconnect GitHub. Never use the local GitHub CLI token as a Worker secret.
+
+Each user connects a private repository with a fine-grained token. Select only that repository and grant Contents read and write permission. See [work records](../docs/work-log.md). The app saves manual records and selected outputs. It does not collect ChatGPT or Codex conversations. It does not export existing records without a save action.
+
 ## Install the Mac widget
 
 Use the [Mac installer and installation guide](../docs/mac-install.md) for the prebuilt app. This beta requires macOS 26 or later. Apple has not notarized it. A first launch can require approval in **System Settings > Privacy & Security**.

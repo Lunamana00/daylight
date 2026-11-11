@@ -21,6 +21,8 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const { db, user } = await workAccess(request);
-    return Response.json(await changeWork(db, user!, await workBody(request)), { headers: privateHeaders });
+    const input = await workBody(request);
+    if (input.op === "connection.add") throw new PlannerError("자동 수집은 보류 중입니다. 직접 기록을 추가해 주세요.", 403);
+    return Response.json(await changeWork(db, user!, input), { headers: privateHeaders });
   } catch (error) { return workFail(error); }
 }

@@ -109,3 +109,16 @@ export const workFileChunks = sqliteTable("work_file_chunks", {
   position: integer("position").notNull(),
   content: blob("content", { mode: "buffer" }).notNull(),
 }, table => [primaryKey({ columns: [table.fileId, table.position] })]);
+
+export const workGithubConnections = sqliteTable("work_github_connections", {
+  artifactId: text("artifact_id").primaryKey().references(() => workArtifacts.id),
+  ownerId: text("owner_id").notNull().references(() => members.id),
+  repositoryId: integer("repository_id").notNull(), repository: text("repository").notNull(), branch: text("branch").notNull(),
+  tokenCipher: text("token_cipher").notNull(), connectedAt: text("connected_at").notNull(),
+});
+export const workGithubVersions = sqliteTable("work_github_versions", {
+  id: text("id").primaryKey(), ownerId: text("owner_id").notNull().references(() => members.id),
+  entryId: text("entry_id").notNull().references(() => workEntries.id),
+  repositoryId: integer("repository_id").notNull(), repository: text("repository").notNull(), commitSha: text("commit_sha").notNull(),
+  path: text("path").notNull(), digest: text("digest").notNull(), savedAt: text("saved_at").notNull(),
+}, table => [uniqueIndex("work_github_version_content").on(table.entryId, table.repositoryId, table.digest), index("work_github_versions_entry").on(table.ownerId, table.entryId, table.savedAt)]);

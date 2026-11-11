@@ -12,6 +12,11 @@ export default function PrivacyPage() {
       <p>자동 동기화에 필요한 연결 토큰은 서버에서 암호화하여 저장합니다. Mac 앱의 로그인 세션은 기기의 Keychain에 저장하며, 위젯 표시에 필요한 할 일과 일정 사본을 해당 Mac에 저장합니다.</p>
     </section>
     <section>
+      <h2>GitHub 기록 저장</h2>
+      <p>GitHub 연결은 선택 사항입니다. 사용자가 직접 저장을 누르면 해당 기록, 프로젝트 설명과 단계, 연결한 할 일 제목, 선택한 첨부파일을 본인 소유의 비공개 GitHub 저장소로 전송합니다. GitHub가 저장된 버전과 파일을 보관하며, 접근 범위는 해당 저장소의 권한 설정을 따릅니다. Google 캘린더 일정과 ChatGPT·Codex 대화는 자동으로 수집하거나 전송하지 않습니다.</p>
+      <p>연결 토큰은 서버에서 암호화하여 저장합니다. 연결을 해제하면 서버에 저장된 토큰을 삭제합니다. daylight에서 기록을 수정하거나 첨부파일을 삭제해도 GitHub의 이전 버전은 남습니다. GitHub에 저장한 내용과 이력을 삭제하려면 GitHub에서 별도로 처리해야 합니다.</p>
+    </section>
+    <section>
       <h2>표시 범위와 서비스 제공</h2>
       <p>할 일과 완료 상태는 daylight에 함께 초대된 사용자에게 표시됩니다. 할 일의 수정과 삭제는 작성자만 할 수 있습니다. Google 캘린더 일정, 프로젝트 기록과 첨부파일은 본인 화면에만 표시됩니다.</p>
       <p>Google은 로그인과 캘린더 연결을, Cloudflare는 서버 운영과 데이터 저장을 처리합니다. Google에서 받은 사용자 데이터를 판매하거나 광고에 사용하지 않으며, 범용 AI 모델 학습에 사용하지 않습니다. Google 사용자 데이터의 사용과 전송은 제한적 사용 요건을 포함한 <a href="https://developers.google.com/terms/api-services-user-data-policy">Google API 서비스 사용자 데이터 정책</a>을 따릅니다.</p>

@@ -1,11 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
-import { Check, Download, ExternalLink, FileText, FolderOpen, Paperclip, Plus, RefreshCw, Star, X } from "lucide-react";
+import { Check, Download, ExternalLink, FileText, FolderOpen, GitBranch, Paperclip, Plus, RefreshCw, Star, X } from "lucide-react";
 import type { Task } from "../lib/planner-core";
 import { projectColors, taskHue } from "../lib/planner-core";
-import { workKinds, workProviders, workSummaryFields } from "../lib/work-log-types";
-import type { WorkArtifact, WorkCatalog, WorkDetail, WorkEntry, WorkStage } from "../lib/work-log-types";
+import { workGithubUrl, workKinds, workProviders, workSummaryFields } from "../lib/work-log-types";
+import type { WorkArtifact, WorkCatalog, WorkDetail, WorkEntry, WorkGithubState, WorkGithubVersion, WorkStage } from "../lib/work-log-types";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
 
 const stamp = (value: string) => new Intl.DateTimeFormat("ko-KR", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "Asia/Seoul" }).format(new Date(value));
@@ -78,11 +78,15 @@ function WorkDetailView({ artifact, artifacts, task, onClearTask, onOpenTask, on
   const [adding, setAdding] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [connectionFile, setConnectionFile] = useState<string | null>(null);
+  const [github, setGithub] = useState<WorkGithubState>({ connection: null, versions: [] });
   const sequence = useRef(0);
   const artifactId = artifact?.id ?? "";
   const query = `?artifactId=${encodeURIComponent(artifactId)}&stageId=${encodeURIComponent(view === "flow" ? stage : "")}&view=${view}`;
-  const load = useCallback(async () => { const serial = ++sequence.current; const value = await api<WorkDetail>(query); if (serial === sequence.current) setDetail(value); }, [query]);
+  const load = useCallback(async () => {
+    const serial = ++sequence.current;
+    const [value, storage] = await Promise.all([api<WorkDetail>(query), artifactId ? api<WorkGithubState>(`/github?artifactId=${encodeURIComponent(artifactId)}`) : Promise.resolve({ connection: null, versions: [] })]);
+    if (serial === sequence.current) { setDetail(value); setGithub(storage); }
+  }, [query, artifactId]);
   useEffect(() => { setDetail(null); void load().catch(error => setError(error.message)); return () => { ++sequence.current; }; }, [load]);
   useEffect(() => {
     const refresh = () => { if (!document.hidden && !busy && !adding && (detail?.entries.length ?? 0) <= 100) void load().catch(error => setError(error.message)); };
@@ -96,6 +100,7 @@ function WorkDetailView({ artifact, artifacts, task, onClearTask, onOpenTask, on
     finally { setBusy(false); }
   }
   const change = (input: Record<string, unknown>) => run(async () => { await api("", input); });
+  const saveGithub = github.connection ? async (entryId: string) => { await api("/github", { op: "save", entryId }); } : undefined;
   async function exportFile(portfolio: boolean) {
     const response = await fetch(`/api/worklog?artifactId=${encodeURIComponent(artifactId)}&export=${portfolio ? "portfolio" : "timeline"}`, { cache: "no-store" });
     if (!response.ok) throw new Error((await response.json() as { error?: string }).error);
@@ -105,9 +110,9 @@ function WorkDetailView({ artifact, artifacts, task, onClearTask, onOpenTask, on
   const visible = detail?.entries ?? [];
   const records = <>
     {artifact && <div className="work-actions work-actions-left"><button className="button primary compact" disabled={busy} onClick={() => setAdding(!adding)}><Plus size={14} />{materials ? "자료 추가" : "기록·자료 추가"}</button></div>}
-    {adding && artifact && detail && <RecordForm artifactId={artifact.id} stages={detail.stages} stageId={materials ? "" : stage} tasks={detail.tasks} materials={materials} uploadsAvailable={uploadsAvailable} onSaved={async () => { await load(); await onSaved(); }} onClose={() => setAdding(false)} onError={setError} />}
+    {adding && artifact && detail && <RecordForm artifactId={artifact.id} stages={detail.stages} stageId={materials ? "" : stage} tasks={detail.tasks} materials={materials} uploadsAvailable={uploadsAvailable} saveGithub={saveGithub} onSaved={async () => { await load(); await onSaved(); }} onClose={() => setAdding(false)} onError={setError} />}
     {detail ? <>
-      <div className="work-timeline" aria-label={materials ? "자료 모아보기" : "진행 기록"}>{visible.map(entry => <EntryCard key={entry.id} entry={entry} artifacts={artifacts} detail={detail} materials={materials} busy={busy} uploadsAvailable={uploadsAvailable} onChange={change} run={run} />)}</div>
+      <div className="work-timeline" aria-label={materials ? "자료 모아보기" : "진행 기록"}>{visible.map(entry => <EntryCard key={entry.id} entry={entry} artifacts={artifacts} detail={detail} materials={materials} busy={busy} uploadsAvailable={uploadsAvailable} versions={github.versions.filter(version => version.entryId === entry.id)} saveGithub={saveGithub} onChange={change} run={run} />)}</div>
       {!visible.length && <p className="work-empty muted">{materials ? "파일이나 링크를 추가해 주세요." : artifact ? "이 단계에 기록을 추가해 주세요." : "연결을 기다리는 기록이 없어요."}</p>}
       {detail.nextCursor && <button className="button secondary compact" disabled={busy} onClick={() => { setBusy(true); setError(""); const serial = ++sequence.current; void api<WorkDetail>(`${query}&cursor=${encodeURIComponent(detail.nextCursor!)}`).then(page => { if (serial === sequence.current) setDetail(current => current && ({ ...page, entries: [...current.entries, ...page.entries] })); }).catch(error => setError(error.message)).finally(() => setBusy(false)); }}>{materials ? "이전 자료 더 보기" : "이전 기록 더 보기"}</button>}
     </> : !error && <p role="status" className="muted">{materials ? "자료 불러오는 중…" : "기록 불러오는 중…"}</p>}
@@ -124,6 +129,20 @@ function WorkDetailView({ artifact, artifacts, task, onClearTask, onOpenTask, on
       <button type="button" className="text-button" disabled={busy} aria-pressed={artifact.colorHue == null} onClick={() => void change({ op: "artifact.color", id: artifact.id, colorHue: null })}>{artifact.colorHue == null && <Check size={12} aria-hidden="true" />}자동</button>
     </div>}
     {error && <p className="error-banner" role="alert">{error}</p>}
+    {artifact && <details className="card work-github-settings">
+      <summary><GitBranch size={15} />{github.connection ? `GitHub 연결됨 · ${github.connection.repository}` : "GitHub 저장소 연결"}</summary>
+      {github.connection ? <div className="work-github-connected"><a className="text-button" href={`https://github.com/${github.connection.repository}`} target="_blank" rel="noreferrer">비공개 저장소 열기<ExternalLink size={12} /></a><button className="text-button" disabled={busy} onClick={() => void run(async () => { await api("/github", { op: "disconnect", artifactId }); })}>연결 해제</button><p className="tiny muted">직접 저장한 기록과 첨부파일만 전송됩니다. 이전에 저장한 버전은 GitHub에 남습니다.</p></div> : <form className="work-form" onSubmit={event => {
+        event.preventDefault(); const form = event.currentTarget, values = new FormData(form);
+        const token = values.get("token"); (form.elements.namedItem("token") as HTMLInputElement).value = "";
+        void run(async () => { await api("/github", { op: "connect", artifactId, repository: values.get("repository"), token }); });
+      }}>
+        <label>본인의 비공개 저장소<input name="repository" placeholder="https://github.com/계정/저장소" required disabled={busy} /></label>
+        <label>GitHub 연결 토큰<input name="token" type="password" autoComplete="off" placeholder="github_pat_…" required disabled={busy} /></label>
+        <p className="tiny muted">README가 있는 비공개 저장소를 준비하고, 해당 저장소만 선택한 토큰에 Contents 읽기·쓰기를 허용해 주세요. 토큰은 암호화해 보관하며 화면에 다시 표시하지 않습니다.</p>
+        <a className="text-button" href="https://github.com/settings/personal-access-tokens/new?name=daylight+work+records&description=Save+manual+daylight+records+to+one+private+repository&contents=write&expires_in=90" target="_blank" rel="noreferrer">GitHub에서 연결 토큰 만들기<ExternalLink size={12} /></a>
+        <button className="button secondary compact" disabled={busy}>저장소 연결</button>
+      </form>}
+    </details>}
     {task && <div className="card work-task-context"><span><strong>{task.title}</strong>의 기록 연결</span>{artifact && <><StageSelect stages={detail?.stages ?? []} value={stage} onChange={setStage} /><button className="button primary compact" disabled={busy || !detail} onClick={() => void run(async () => { await api("", { op: "task.link", taskId: task.id, artifactId, stageId: stage || null }); onClearTask(); })}>여기에 연결</button></>}<button className="icon-button" aria-label="할 일 연결 닫기" onClick={onClearTask}><X size={14} /></button></div>}
     <Tabs value={view} onValueChange={value => { setDetail(null); setView(value); }} className="work-tabs">
       {artifact && <TabsList aria-label="작업물 보기"><TabsTrigger value="flow" disabled={busy || adding}>흐름</TabsTrigger><TabsTrigger value="materials" disabled={busy || adding}>자료</TabsTrigger><TabsTrigger value="summary" disabled={busy || adding}>정리</TabsTrigger></TabsList>}
@@ -142,19 +161,6 @@ function WorkDetailView({ artifact, artifacts, task, onClearTask, onOpenTask, on
     {records}
     {detail && <>
       {!!detail.tasks.length && <details className="work-settings"><summary>연결된 할 일 {detail.tasks.length}</summary><ul className="work-linked-tasks">{detail.tasks.map(item => <li key={item.id}><button className="text-button" onClick={() => onOpenTask(item.date)}><span aria-label={item.done ? "완료" : "할 일"}>{item.done ? "✓" : "□"}</span>{item.title}</button><time>{item.date}</time><button className="text-button" disabled={busy} onClick={() => void change({ op: "task.link", taskId: item.id, artifactId: null })}>연결 해제</button></li>)}</ul></details>}
-      {artifact && <details className="work-settings"><summary>GPT·Codex 기록 연결</summary>
-        <form className="work-form" onSubmit={event => { event.preventDefault(); const form = new FormData(event.currentTarget); void run(async () => {
-          const result = await api<{ secret: string; provider: string; scope: string }>("", { op: "connection.add", artifactId, provider: form.get("provider"), scope: form.get("scope") });
-          const file = JSON.stringify({ origin: window.location.origin, token: result.secret }, null, 2); setConnectionFile(file); download("daylight-work-connection.json", file, "application/json");
-        }); }}>
-          <label>앱<select name="provider"><option value="codex">Codex</option><option value="chatgpt">ChatGPT</option></select></label>
-          <label>기록을 가져올 곳<input name="scope" placeholder="Codex 프로젝트 폴더 또는 ChatGPT 대화·프로젝트 주소" maxLength={2048} required /></label>
-          <button className="button secondary compact" disabled={busy}>연결파일 만들기</button>
-          <p className="tiny muted">연결파일을 Codex에 전달해 자동 기록을 설정하세요. 이 작업물의 기록만 연결됩니다.</p>
-        </form>
-        {connectionFile && <button className="text-button" onClick={() => download("daylight-work-connection.json", connectionFile, "application/json")}>연결파일 다시 다운로드</button>}
-        <ul className="work-connections">{detail.connections.map(item => <li key={item.id}><strong>{workProviders[item.provider]}</strong><span>{item.scope}</span><small>{item.revokedAt ? "연결 해제됨" : Date.parse(item.expiresAt) < Date.now() ? "연결 만료" : item.lastSyncAt ? `최근 기록 ${stamp(item.lastSyncAt)}` : "아직 기록을 가져오지 않음"}</small>{!item.revokedAt && <button className="text-button" disabled={busy} onClick={() => void change({ op: "connection.revoke", id: item.id })}>연결 해제</button>}</li>)}</ul>
-      </details>}
     </>}
       </TabsContent>
       {artifact && <>
@@ -191,9 +197,10 @@ function StageSelect({ stages, value, onChange, name }: { stages: WorkStage[]; v
   return <select name={name} value={value} onChange={event => onChange?.(event.target.value)} aria-label="진행 단계"><option value="">단계 미지정</option>{stages.map(stage => <option key={stage.id} value={stage.id}>{stage.title}</option>)}</select>;
 }
 
-function RecordForm({ artifactId, stages, stageId, tasks, materials, uploadsAvailable, onSaved, onClose, onError }: {
+function RecordForm({ artifactId, stages, stageId, tasks, materials, uploadsAvailable, saveGithub, onSaved, onClose, onError }: {
   artifactId: string; stages: WorkStage[]; stageId: string; tasks: WorkDetail["tasks"]; materials: boolean; uploadsAvailable: boolean;
   onSaved: () => Promise<void>; onClose: () => void; onError: (error: string) => void;
+  saveGithub?: (entryId: string) => Promise<void>;
 }) {
   const [selectedStage, setSelectedStage] = useState(stageId), [files, setFiles] = useState<File[]>([]), [createdId, setCreatedId] = useState<string | null>(null), [saving, setSaving] = useState(false);
   return <form className="card work-form" onSubmit={async event => {
@@ -207,8 +214,9 @@ function RecordForm({ artifactId, stages, stageId, tasks, materials, uploadsAvai
         id = result.id; setCreatedId(id);
       }
       for (const file of files) { await attach(id, file); setFiles(current => current.filter(item => item !== file)); }
+      if (saveGithub) await saveGithub(id);
       await onSaved(); onClose();
-    } catch (error) { onError(`${id ? "기록은 저장됐어요. 남은 파일을 다시 올려 주세요. " : ""}${error instanceof Error ? error.message : "저장하지 못했어요."}`); await onSaved().catch(() => {}); }
+    } catch (error) { onError(`${id ? "입력한 기록은 daylight에 남아 있어요. 저장을 다시 시도해 주세요. " : ""}${error instanceof Error ? error.message : "저장하지 못했어요."}`); await onSaved().catch(() => {}); }
     finally { setSaving(false); }
   }}>
     <fieldset disabled={saving || Boolean(createdId)}>
@@ -220,13 +228,18 @@ function RecordForm({ artifactId, stages, stageId, tasks, materials, uploadsAvai
     </fieldset>
     <label>보고서·이미지<input type="file" multiple accept=".pdf,.png,.jpg,.jpeg,.gif,.webp" disabled={saving || !uploadsAvailable} onChange={event => setFiles(current => [...current, ...Array.from(event.target.files ?? [])])} /><small>{uploadsAvailable ? "파일당 10MB · 전체 첨부 저장 공간 200MB · PDF, PNG, JPG, GIF, WebP" : "파일을 첨부할 수 없어요."}</small></label>
     {!!files.length && <ul className="work-file-queue">{files.map((file, index) => <li key={`${file.name}-${index}`}>{file.name}<button type="button" className="icon-button" aria-label={`${file.name} 첨부 취소`} disabled={saving} onClick={() => setFiles(current => current.filter((_, i) => i !== index))}><X size={12} /></button></li>)}</ul>}
-    <div className="work-actions"><button type="button" className="text-button" disabled={saving} onClick={onClose}>닫기</button><button className="button primary compact" disabled={saving}>{saving ? "저장 중…" : createdId ? "남은 파일 올리기" : materials ? "자료 저장" : "기록 저장"}</button></div>
+    {!saveGithub && <p className="tiny muted">현재 daylight에 저장됩니다. ‘GitHub 저장소 연결’에서 연결한 뒤 기록을 GitHub에 저장할 수 있어요.</p>}
+    <div className="work-actions"><button type="button" className="text-button" disabled={saving} onClick={onClose}>닫기</button><button className="button primary compact" disabled={saving}>{saving ? "저장 중…" : createdId ? "저장 다시 시도" : saveGithub ? "GitHub에 저장" : materials ? "자료 저장" : "기록 저장"}</button></div>
   </form>;
 }
 
-function EntryCard({ entry, artifacts, detail, materials, busy, uploadsAvailable, onChange, run }: { entry: WorkEntry; artifacts: WorkArtifact[]; detail: WorkDetail; materials: boolean; busy: boolean; uploadsAvailable: boolean; onChange: (input: Record<string, unknown>) => Promise<void>; run: (action: () => Promise<void>) => Promise<void> }) {
+function EntryCard({ entry, artifacts, detail, materials, busy, uploadsAvailable, versions, saveGithub, onChange, run }: { entry: WorkEntry; artifacts: WorkArtifact[]; detail: WorkDetail; materials: boolean; busy: boolean; uploadsAvailable: boolean; versions: WorkGithubVersion[]; saveGithub?: (entryId: string) => Promise<void>; onChange: (input: Record<string, unknown>) => Promise<void>; run: (action: () => Promise<void>) => Promise<void> }) {
   const [editing, setEditing] = useState(false), [target, setTarget] = useState(entry.artifactId ?? "");
   return <article className="card work-entry">
+    {entry.provider === "manual" && <div className="work-entry-github">
+      <button className="text-button" disabled={busy || !saveGithub} onClick={() => void run(async () => { await saveGithub!(entry.id); })}><GitBranch size={13} />GitHub에 저장</button>
+      {versions.length ? <details><summary>저장한 버전 {versions.length}개</summary><ul>{versions.map(version => <li key={version.id}><a href={workGithubUrl(version)} target="_blank" rel="noreferrer">{stamp(version.savedAt)} · 기록과 산출물<ExternalLink size={11} /></a></li>)}</ul></details> : <span className="tiny muted">daylight에 저장됨</span>}
+    </div>}
     <div className="work-entry-meta"><time dateTime={entry.occurredAt}>{stamp(entry.occurredAt)}</time><span>{entry.stageTitle || "단계 미지정"}</span>{!materials && <><span>{workKinds[entry.kind]}</span><span>{workProviders[entry.provider]}</span></>}<button className={`icon-button ${entry.featured ? "starred" : ""}`} aria-label="포트폴리오에 포함" aria-pressed={Boolean(entry.featured)} disabled={busy} onClick={() => void onChange({ op: "entry.patch", id: entry.id, featured: !entry.featured })}><Star size={14} /></button></div>
     {editing ? <form className="work-form" onSubmit={event => { event.preventDefault(); const form = new FormData(event.currentTarget); void run(async () => { await api("", { op: "entry.patch", id: entry.id, title: form.get("title"), body: form.get("body") }); setEditing(false); }); }}><label>{materials ? "자료 이름" : "기록 제목"}<input name="title" defaultValue={entry.title} maxLength={240} required /></label><label>{materials ? "활용 메모" : "내용"}<textarea name="body" defaultValue={entry.body} maxLength={8000} rows={4} /></label><div className="work-actions"><button type="button" className="text-button" onClick={() => setEditing(false)}>취소</button><button className="button secondary compact" disabled={busy}>저장</button></div></form> : <><h3>{entry.title}</h3>{entry.body && (materials ? <details className="work-material-note"><summary>활용 메모</summary><p className="work-entry-body">{entry.body}</p></details> : <p className="work-entry-body">{entry.body}</p>)}</>}
     {entry.taskTitle && <p className="work-entry-task">{entry.taskTitle}{entry.subtaskTitle ? ` / ${entry.subtaskTitle}` : ""}</p>}

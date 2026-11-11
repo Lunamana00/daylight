@@ -7,5 +7,6 @@ declare namespace Cloudflare {
     GOOGLE_CLIENT_ID?: string;
     GOOGLE_CLIENT_SECRET?: string;
     DAYLIGHT_GOOGLE_INVITES?: string;
+    WORK_GITHUB_KEY?: string;
   }
 }

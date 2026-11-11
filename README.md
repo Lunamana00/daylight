@@ -25,9 +25,9 @@ Open **작업물** to create a project and set its goal and work stages. Add dat
 
 The interface uses neutral surfaces and dark task text. Project colors appear in small dots, edge lines, and progress bars. They do not fill task cards.
 
-Work records and attachments are private to their owner. A scoped collector can add outcomes from selected ChatGPT or Codex chats and create accepted next tasks. See [work records](docs/work-log.md) for local setup and collection.
+Work records and attachments are private to their owner. Connect a private GitHub repository in the project. Enter a record and attach reports or images. Select **GitHub에 저장** to save the record and files as one version. Open a saved version from daylight. Earlier versions stay in GitHub. ChatGPT and Codex collection is disabled. See [work records](docs/work-log.md) for setup.
 
-Attachments use the existing database. An R2 subscription is not necessary. Each file can be up to 10 MB. Uploads stop when total attachments reach 200 MB.
+The database keeps your editable records and attachments. A failed GitHub save does not remove them. Existing records are not sent to GitHub until you select **GitHub에 저장**. An R2 subscription is not necessary. Each file can be up to 10 MB. Uploads stop when total database attachments reach 200 MB.
 
 ## Original Sites deployment
 

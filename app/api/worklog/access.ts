@@ -1,15 +1,13 @@
 import { env } from "cloudflare:workers";
 import { getDaylightSession } from "../../identity";
 import { PlannerError } from "../../../lib/planner-core";
-import { workConnection, workObject } from "../../../lib/work-log";
+import { workObject } from "../../../lib/work-log";
 
 export const privateHeaders = { "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff" };
 export async function workAccess(request: Request, allowCollector = false) {
   if (!env.DB) throw new Error("Missing DB");
   if (allowCollector && request.headers.has("authorization")) {
-    const connection = await workConnection(env.DB, request.headers.get("authorization"));
-    if (!connection) throw new PlannerError("기록 연결이 만료되었거나 해제됐어요.", 401);
-    return { db: env.DB, ownerId: connection.ownerId, connection, user: null };
+    throw new PlannerError("자동 수집은 보류 중입니다. daylight에서 직접 자료를 추가해 주세요.", 410);
   }
   const session = await getDaylightSession(request.headers);
   if (!session) throw new PlannerError("로그인이 필요합니다.", 401);

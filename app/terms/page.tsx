@@ -16,6 +16,10 @@ export default function TermsPage() {
       <p>Mac 위젯에는 해당 Mac에서 로그인한 계정의 할 일과 선택한 일정이 표시됩니다. 다른 사람과 Mac을 공유할 때는 위젯 표시 범위를 확인해 주세요.</p>
     </section>
     <section>
+      <h2>GitHub 기록 저장</h2>
+      <p>직접 입력한 기록과 선택한 산출물을 본인 소유의 비공개 GitHub 저장소에 저장할 수 있습니다. 연결한 저장소의 접근 권한은 GitHub에서 관리합니다. 저장된 버전은 daylight의 연결 해제나 첨부파일 삭제 후에도 GitHub에 남습니다.</p>
+    </section>
+    <section>
       <h2>연결 해제와 문의</h2>
       <p>캘린더 연결은 설정에서 해제할 수 있습니다. 정보 처리와 삭제 방법은 <a href="/privacy">개인정보처리방침</a>에서 확인할 수 있습니다.</p>
       <p>이용 및 계정 관련 문의: <a href="mailto:galaxycoreadvence@gmail.com">galaxycoreadvence@gmail.com</a></p>

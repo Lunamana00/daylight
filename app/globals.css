@@ -282,6 +282,15 @@
 .calendar-week-task-row .calendar-task-group{margin:0 6px 0 2px}
 
 .work-space{max-width:1240px;margin:0 auto}
+.work-github-settings{padding:12px 14px;margin-bottom:16px}
+.work-github-settings>summary{display:flex;align-items:center;gap:7px;cursor:pointer;font-size:12px;font-weight:550;overflow-wrap:anywhere}
+.work-github-settings .work-form{padding:14px 0 0;margin:0}
+.work-github-connected{display:flex;align-items:center;flex-wrap:wrap;gap:12px;padding-top:12px}
+.work-github-connected p{width:100%;line-height:1.6}
+.work-entry-github{display:flex;align-items:center;flex-wrap:wrap;gap:14px;margin-bottom:10px;font-size:11px}
+.work-entry-github details>summary{cursor:pointer;color:var(--muted)}
+.work-entry-github ul{list-style:none;display:flex;flex-direction:column;gap:7px;padding-top:8px}
+.work-entry-github a{display:flex;align-items:center;gap:5px;color:var(--accent)}
 .work-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:20px}
 .work-heading h2{font-size:19px;font-weight:650;letter-spacing:-.6px}
 .work-layout{display:grid;grid-template-columns:205px minmax(0,1fr);gap:28px;align-items:start}

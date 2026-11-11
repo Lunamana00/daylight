@@ -12,6 +12,10 @@ export type WorkEntry = {
 };
 export type WorkTask = { id: string; title: string; date: string; endDate: string | null; done: number; stageId: string | null; subtasks: Array<{ id: string; title: string; date: string; done: number }> };
 export type WorkConnection = { id: string; artifactId: string; provider: "codex" | "chatgpt"; scope: string; expiresAt: string; lastSyncAt: string | null; revokedAt: string | null };
+export type WorkGithubConnection = { repository: string; branch: string; connectedAt: string };
+export type WorkGithubVersion = { id: string; entryId: string; repository: string; commitSha: string; path: string; digest: string; savedAt: string };
+export const workGithubUrl = (version: WorkGithubVersion) => `https://github.com/${version.repository}/blob/${version.commitSha}/${version.path.split("/").map(encodeURIComponent).join("/")}/README.md`;
+export type WorkGithubState = { connection: WorkGithubConnection | null; versions: WorkGithubVersion[] };
 export type WorkCatalog = { artifacts: WorkArtifact[]; pending: number };
 export type WorkDetail = { stages: WorkStage[]; entries: WorkEntry[]; nextCursor: string | null; tasks: WorkTask[]; connections: WorkConnection[] };
 export const workKinds: Record<WorkKind, string> = { plan: "할 예정", decision: "결정", progress: "진행", result: "결과" };
@@ -25,7 +29,7 @@ export const workSummaryFields = [
 ] as const;
 
 const escapeMarkdown = (value: string) => value.replace(/[\\`*_{}\[\]<>#]/g, "\\$&");
-export function workMarkdown(artifact: WorkArtifact, entries: WorkEntry[], stages: WorkStage[], origin: string, portfolio = false) {
+export function workMarkdown(artifact: WorkArtifact, entries: WorkEntry[], stages: WorkStage[], origin: string, portfolio = false, fileUrl?: (file: WorkFile) => string) {
   const chosen = entries.filter(entry => !portfolio || entry.featured).sort((a, b) => a.occurredAt.localeCompare(b.occurredAt) || a.id.localeCompare(b.id));
   return [`# ${escapeMarkdown(artifact.title)}`, artifact.description ? `## 목표\n\n${artifact.description}` : "", artifact.url ? `<${artifact.url}>` : "",
     ...workSummaryFields.filter(field => artifact[field.key]).map(field => `## ${field.label}\n\n${artifact[field.key]}`),
@@ -35,7 +39,7 @@ export function workMarkdown(artifact: WorkArtifact, entries: WorkEntry[], stage
       [entry.stageTitle, workKinds[entry.kind], workProviders[entry.provider]].filter(Boolean).join(" · "),
       entry.body,
       ...entry.links.map(link => `- [${escapeMarkdown(link.label)}](<${link.url}>)`),
-      ...entry.files.map(file => `- [${escapeMarkdown(file.fileName)}](<${origin}/api/worklog/files/${file.id}>)`),
+      ...entry.files.map(file => `- [${escapeMarkdown(file.fileName)}](<${fileUrl ? fileUrl(file) : `${origin}/api/worklog/files/${file.id}`}>)`),
       entry.sourceUrl ? `[대화·근거 보기](<${entry.sourceUrl}>)` : "",
     ].filter(Boolean).join("\n\n")),
   ].filter(Boolean).join("\n\n") + "\n";
