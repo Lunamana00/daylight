@@ -116,7 +116,7 @@ function WorkDetailView({ artifact, artifacts, task, onClearTask, onOpenTask, on
     <header className="work-heading"><div><h2>{artifact?.title ?? "연결 대기"}</h2>{artifact?.description && <p className="work-goal">{artifact.description}</p>}{artifact?.url && <a href={artifact.url} target="_blank" rel="noreferrer" className="text-button">대표 결과물<ExternalLink size={12} /></a>}</div><button className="icon-button" disabled={busy} aria-label="기록 새로고침" onClick={() => void run(async () => {})}><RefreshCw size={15} /></button></header>
     {artifact && <div role="group" aria-label="프로젝트 색상" className="mb-5 flex flex-wrap items-center gap-2">
       <span className="tiny muted">색상</span>
-      {projectColors.map(color => <button key={color.hue} type="button" className="icon-button" disabled={busy} aria-label={`${color.name}색`} aria-pressed={artifact.colorHue === color.hue} title={color.name}
+      {projectColors.map(color => <button key={color.hue} type="button" className="icon-button" disabled={busy} aria-label={`${color.name} 색상`} aria-pressed={artifact.colorHue === color.hue} title={color.name}
         style={{ width: 26, height: 26, borderRadius: "50%", background: `hsl(${color.hue} 38% 43%)`, color: "white" }}
         onClick={() => void change({ op: "artifact.color", id: artifact.id, colorHue: color.hue })}>
         {artifact.colorHue === color.hue && <Check size={15} aria-hidden="true" />}
