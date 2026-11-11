@@ -3,17 +3,17 @@
 import { useState, type CSSProperties } from "react";
 import { ArrowRight, Check, FolderOpen, MoreHorizontal, Pencil, Star, Trash2, X } from "lucide-react";
 import { addDays, taskHue } from "../lib/planner-core";
-import type { Subtask, Task } from "../lib/planner-core";
+import type { Subtask, Task, TaskProject } from "../lib/planner-core";
 
 type Props = {
-  task: Task; date: string; busy: boolean; readOnly: boolean;
+  task: Task; projects: TaskProject[]; date: string; busy: boolean; readOnly: boolean;
   onChange: (input: Record<string, unknown>, message?: string) => Promise<boolean>;
   onDelete: (task: Task, child?: Subtask) => void;
   onOpenWorkLog?: (task: Task) => void;
 };
 const label = (date: string) => `${Number(date.slice(5, 7))}.${Number(date.slice(8))}`;
 
-export function PlannerTask({ task, date, busy, readOnly, onChange, onDelete, onOpenWorkLog }: Props) {
+export function PlannerTask({ task, projects, date, busy, readOnly, onChange, onDelete, onOpenWorkLog }: Props) {
   const [menu, setMenu] = useState(false);
   const [editing, setEditing] = useState(false);
   const [title, setTitle] = useState(task.title);
@@ -25,7 +25,7 @@ export function PlannerTask({ task, date, busy, readOnly, onChange, onDelete, on
   const children = task.subtasks;
   const completed = children.filter(child => child.done).length;
 
-  return <li className={`task-item task-color ${children.length || task.endDate ? "task-family" : ""}`} style={{ "--task-hue": taskHue(task.id) } as CSSProperties}>
+  return <li className={`task-item task-color ${task.projectId ? "" : "task-unassigned"} ${children.length || task.endDate ? "task-family" : ""}`} style={{ "--task-hue": taskHue(task) } as CSSProperties}>
     <div className={`task-row ${task.done ? "is-done" : ""}`}>
       <button className={`task-check ${task.done ? "checked" : ""}`} disabled={busy || readOnly || children.length > 0}
         onClick={() => void onChange({ op: "task.patch", id: task.id, done: !task.done })}
@@ -84,5 +84,11 @@ export function PlannerTask({ task, date, busy, readOnly, onChange, onDelete, on
         <button className="text-button" disabled={busy || !childTitle.trim()}>추가</button>
       </form>}
     </details>}
+    {!readOnly && <div className="task-project-footer">
+      <label className="task-project-picker"><span className="project-color-dot" aria-hidden="true" /><select aria-label={`${task.title} 프로젝트`} value={task.projectId ?? ""} disabled={busy} onChange={event => void onChange({ op: "task.link", taskId: task.id, artifactId: event.target.value || null })}>
+        <option value="">프로젝트 미지정</option>{projects.map(project => <option key={project.id} value={project.id}>{project.title}</option>)}
+      </select></label>
+      {onOpenWorkLog && <button className="text-button" onClick={() => onOpenWorkLog(task)}><FolderOpen size={12} />{task.projectId ? "기록 보기" : "프로젝트 관리"}</button>}
+    </div>}
   </li>;
 }

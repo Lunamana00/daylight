@@ -1,8 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import { Download, ExternalLink, FileText, FolderOpen, Paperclip, Plus, RefreshCw, Star, X } from "lucide-react";
 import type { Task } from "../lib/planner-core";
+import { taskHue } from "../lib/planner-core";
 import { workKinds, workProviders, workSummaryFields } from "../lib/work-log-types";
 import type { WorkArtifact, WorkCatalog, WorkDetail, WorkEntry, WorkStage } from "../lib/work-log-types";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
@@ -30,7 +31,7 @@ async function attach(entryId: string, file: File) {
 
 export function WorkLog({ task, onClearTask, onOpenTask }: { task: Task | null; onClearTask: () => void; onOpenTask: (date: string) => void }) {
   const [catalog, setCatalog] = useState<(WorkCatalog & { uploadsAvailable: boolean }) | null>(null);
-  const [selected, setSelected] = useState<string | null>(null);
+  const [selected, setSelected] = useState<string | null>(task?.projectId ?? null);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -41,7 +42,7 @@ export function WorkLog({ task, onClearTask, onOpenTask }: { task: Task | null; 
   useEffect(() => { void load().catch(error => setError(error.message)); }, [load]);
   const artifact = catalog?.artifacts.find(item => item.id === selected) ?? null;
   return <section className="work-space" aria-label="작업물과 기록">
-    <header className="work-heading"><h2>작업물</h2><button className="button primary compact" onClick={() => setCreating(!creating)}><Plus size={14} />작업물 추가</button></header>
+    <header className="work-heading"><h2>프로젝트</h2><button className="button primary compact" onClick={() => setCreating(!creating)}><Plus size={14} />프로젝트 추가</button></header>
     {error && <p className="error-banner" role="alert">{error}</p>}
     {creating && <form className="card work-form" onSubmit={async event => {
       event.preventDefault(); const form = new FormData(event.currentTarget); setBusy(true); setError("");
@@ -51,7 +52,7 @@ export function WorkLog({ task, onClearTask, onOpenTask }: { task: Task | null; 
       } catch (error) { setError(error instanceof Error ? error.message : "저장하지 못했어요."); }
       finally { setBusy(false); }
     }}>
-      <label>작업물 이름<input name="title" placeholder="예: 배터리 수명 예측 보고서" maxLength={120} required disabled={busy} /></label>
+      <label>프로젝트 이름<input name="title" placeholder="예: 배터리 수명 예측 보고서" maxLength={120} required disabled={busy} /></label>
       <label>최종 목표·결과물<textarea name="description" placeholder="이 작업을 마쳤을 때 무엇이 남아야 하나요?" maxLength={2000} rows={2} required disabled={busy} /></label>
       <label>진행 단계<textarea name="stages" placeholder={"자료 조사\n분석\n보고서 작성\n최종 정리"} rows={4} required disabled={busy} /><small>한 줄에 한 단계씩</small></label>
       <label>대표 링크<input name="url" type="url" placeholder="https://" disabled={busy} /></label>
@@ -59,10 +60,10 @@ export function WorkLog({ task, onClearTask, onOpenTask }: { task: Task | null; 
     </form>}
     {catalog ? <div className="work-layout">
       <nav className="work-artifacts" aria-label="작업물 선택">
-        {catalog.artifacts.map(item => <button key={item.id} className={selected === item.id ? "selected" : ""} aria-pressed={selected === item.id} onClick={() => setSelected(item.id)}><FolderOpen size={16} /><span>{item.title}<small>기록 {item.entryCount} · 할 일 {item.taskCount}</small></span></button>)}
+        {catalog.artifacts.map(item => <button key={item.id} className={`task-color ${selected === item.id ? "selected" : ""}`} style={{ "--task-hue": taskHue(item.id) } as CSSProperties} aria-pressed={selected === item.id} onClick={() => setSelected(item.id)}><FolderOpen size={16} /><span>{item.title}<small>기록 {item.entryCount} · 할 일 {item.taskCount}</small></span></button>)}
         <button className={selected === "" ? "selected" : ""} aria-pressed={selected === ""} onClick={() => setSelected("")}><span>연결 대기<small>{catalog.pending}개</small></span></button>
       </nav>
-      {selected !== null ? <WorkDetailView key={selected} artifact={artifact} artifacts={catalog.artifacts} task={task} onClearTask={onClearTask} onOpenTask={onOpenTask} onSaved={load} uploadsAvailable={catalog.uploadsAvailable} /> : <p className="muted work-empty">작업물을 추가해 주세요.</p>}
+      {selected !== null ? <WorkDetailView key={selected} artifact={artifact} artifacts={catalog.artifacts} task={task?.projectId === selected ? null : task} onClearTask={onClearTask} onOpenTask={onOpenTask} onSaved={load} uploadsAvailable={catalog.uploadsAvailable} /> : <p className="muted work-empty">프로젝트를 추가해 주세요.</p>}
     </div> : !error && <p className="muted" role="status">작업물 불러오는 중…</p>}
   </section>;
 }

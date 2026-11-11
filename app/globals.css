@@ -90,6 +90,8 @@
 .task-composer-footer{display:flex;align-items:end;justify-content:space-between;gap:12px;flex-wrap:wrap;padding-top:10px;border-top:1px solid var(--border)}
 .task-composer-footer .task-period-fields{width:auto;flex:1;gap:8px}
 .task-composer-footer>button{margin-left:auto;padding:9px 18px;border-radius:6px;background:var(--green);color:white;font-size:12px;font-weight:600;min-height:36px}
+.task-composer-project{display:flex;flex-direction:column;gap:4px;max-width:220px;font-size:11px;color:#76816e}
+.task-composer-project select{max-width:100%;min-width:130px;border:1px solid var(--border);border-radius:5px;padding:7px;background:#fff;color:var(--ink);font-size:12px}
 .task-period-fields{display:flex;align-items:end;gap:10px;flex-wrap:wrap;width:100%;font-size:11px;color:#76816e}
 .task-period-fields label{display:flex;flex-direction:column;gap:4px}
 .task-period-fields input{border:1px solid var(--border);border-radius:5px;padding:5px 7px;background:#fff;font-size:12px}
@@ -171,8 +173,25 @@
 @media(max-width:700px){.calendar-toolbar{flex-wrap:wrap}.calendar-view-controls{gap:10px;margin-left:auto}.calendar-week-heading h3{font-size:13px}}
 
 .task-color{--task-accent:hsl(var(--task-hue) 38% 43%);--task-ink:hsl(var(--task-hue) 32% 29%);--task-border:hsl(var(--task-hue) 32% 82%);--task-band:hsl(var(--task-hue) 40% 89%)}
-.task-item,.task-item:last-child{margin:10px 0;padding:2px 12px 9px;border:1px solid var(--task-border);border-left:3px solid var(--task-accent);border-radius:9px;background:#fff}
-.task-item.task-family{background:var(--task-band)}
+.task-color.task-unassigned{--task-accent:#859187;--task-ink:#59665c;--task-border:#dce2db;--task-band:#f1f4ef}
+.project-color-dot{display:inline-block;width:7px;height:7px;flex-shrink:0;border-radius:50%;background:var(--task-accent)}
+.task-project-footer{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:4px 0 0 28px;padding:7px 0 2px}
+.task-project-picker{display:flex;align-items:center;gap:6px;min-width:0;max-width:75%;color:var(--task-ink)}
+.task-project-picker select{min-width:0;max-width:100%;border:0;background:transparent;color:inherit;padding:3px 2px;font-size:11px;text-overflow:ellipsis}
+.task-project-footer .text-button{font-size:10px;color:var(--task-ink)}
+.calendar-week-period .week-period-title>span{display:block;overflow:hidden;text-overflow:ellipsis}
+.calendar-project-label,.calendar-week-task .calendar-project-label{display:flex;align-items:center;gap:4px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:9px;color:var(--task-ink);opacity:.8;margin-top:4px;line-height:1.4}
+.calendar-projects{padding:14px 20px 16px;border-top:1px solid var(--border)}
+.calendar-projects h3{font-size:11px;color:#76816e;font-weight:500;margin-bottom:8px}
+.calendar-projects ul{display:flex;flex-wrap:wrap;gap:8px;list-style:none}
+.calendar-projects li{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;column-gap:6px;row-gap:7px;min-width:160px;max-width:280px;padding:9px 11px;border:1px solid var(--task-border);border-radius:7px;background:var(--task-band);color:var(--task-ink)}
+.calendar-project-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px}
+.calendar-projects small{font-size:10px;font-variant-numeric:tabular-nums}
+.calendar-projects progress{grid-column:1/-1;width:100%;height:3px;appearance:none;border:0;border-radius:3px;overflow:hidden;background:var(--task-border);accent-color:var(--task-accent)}
+.calendar-projects progress::-webkit-progress-bar{background:var(--task-border)}
+.calendar-projects progress::-webkit-progress-value{background:var(--task-accent)}
+.calendar-projects progress::-moz-progress-bar{background:var(--task-accent)}
+.task-item,.task-item:last-child{margin:10px 0;padding:2px 12px 9px;border:1px solid var(--task-border);border-left:3px solid var(--task-accent);border-radius:9px;background:var(--task-band)}
 .task-item>.task-row{padding:10px 0;min-height:42px}
 .task-item .task-title{color:var(--task-ink);font-weight:550}
 .task-family>.task-row .task-title{font-size:14px;font-weight:650}
@@ -253,6 +272,8 @@
 .work-artifacts{display:flex;flex-direction:column;gap:6px;position:sticky;top:20px}
 .work-artifacts>button{justify-content:flex-start;align-items:flex-start;padding:12px;border-radius:8px;gap:9px;text-align:left;font-size:12px;color:#687560}
 .work-artifacts>button.selected{background:#eaf1e6;color:var(--green-dark)}
+.work-artifacts>button.task-color>svg{color:var(--task-accent)}
+.work-artifacts>button.task-color.selected{background:var(--task-band);color:var(--task-ink)}
 .work-artifacts>button>svg{flex-shrink:0;margin-top:2px}
 .work-artifacts>button>span{min-width:0;overflow-wrap:anywhere}
 .work-artifacts small{display:block;color:#7d8975;font-size:10px;margin-top:5px}

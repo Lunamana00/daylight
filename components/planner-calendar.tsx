@@ -4,7 +4,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from
 import { CalendarDays, Check, ChevronLeft, ChevronRight, ExternalLink, Square } from "lucide-react";
 import { ko } from "react-day-picker/locale";
 import { Calendar, CalendarDayButton } from "./ui/calendar";
-import { addDays, calendarTaskGroups, calendarTaskLanes, calendarWeekLayout, calendarWeekOffsets, milestoneKey, monthRange, taskHue, today, weekRange } from "../lib/planner-core";
+import { addDays, calendarProjects, calendarTaskGroups, calendarTaskLanes, calendarWeekLayout, calendarWeekOffsets, milestoneKey, monthRange, taskHue, today, weekRange } from "../lib/planner-core";
 import type { CalendarData, DayData } from "../lib/planner-core";
 
 const calendarDate = (value: string) => new Date(value + "T00:00:00+09:00");
@@ -38,6 +38,7 @@ export function PlannerCalendar({ date, data, busy, onSelectDate, onManage, onCh
     return () => { active = false; };
   }, [from, to, view, data]);
   const current = saved?.from === from && saved.to === to ? saved : null;
+  const projectGroups = calendarProjects(current?.tasks ?? []);
   const selectedEvents = current?.milestones.filter(item => item.date === date) ?? [];
   const offset = (new Date(date + "T00:00:00Z").getUTCDay() + 6) % 7;
   const week = Array.from({ length: 7 }, (_, i) => addDays(date, i - offset));
@@ -79,16 +80,16 @@ export function PlannerCalendar({ date, data, busy, onSelectDate, onManage, onCh
         <div className="calendar-week-tasks" ref={taskBoard}>{calendarWeekLayout(current?.tasks ?? [], week[0], week[6]).map(({ task, start, end, column, span, row }) => {
           if (!task.subtasks.length && (!task.endDate || task.endDate === task.date)) {
             return <section className="calendar-week-task-row" key={task.id} aria-label={task.title} data-column={column} data-span={span} style={{ gridColumn: column, gridRow: row }}>
-              <div className="calendar-task-group task-color" style={{ "--task-hue": taskHue(task.id) } as CSSProperties}>
+              <div className={`calendar-task-group task-color ${task.projectId ? "" : "task-unassigned"}`} style={{ "--task-hue": taskHue(task) } as CSSProperties}>
                 <label className={`calendar-week-task ${task.done ? "is-complete" : ""}`}>
                   <input type="checkbox" checked={Boolean(task.done)} disabled={busy || loading} aria-label={`${task.title} ${task.done ? "완료 취소" : "완료"}`} onChange={() => void onChange({ op: "task.patch", id: task.id, done: !task.done })} />
-                  <span className="week-task-title">{task.title}</span>
+                  <span><span className="week-task-title">{task.title}</span>{task.projectTitle && <small className="calendar-project-label"><i className="project-color-dot" aria-hidden="true" />{task.projectTitle}</small>}</span>
                 </label>
               </div>
             </section>;
           }
           const taskEnd = task.endDate ?? task.date;
-          return <section key={task.id} className="calendar-week-family task-color" data-column={column} data-span={span} style={{ "--task-hue": taskHue(task.id), gridColumn: `${column} / span ${span}`, gridRow: row, gridTemplateColumns: `repeat(${span}, minmax(0, 1fr))` } as CSSProperties} aria-label={task.title}>
+          return <section key={task.id} className={`calendar-week-family task-color ${task.projectId ? "" : "task-unassigned"}`} data-column={column} data-span={span} style={{ "--task-hue": taskHue(task), gridColumn: `${column} / span ${span}`, gridRow: row, gridTemplateColumns: `repeat(${span}, minmax(0, 1fr))` } as CSSProperties} aria-label={task.title}>
             <button
               className={`calendar-week-period ${task.done ? "period-done" : ""}`}
               data-joins-start={task.subtasks.some(child => child.date === start)}
@@ -98,7 +99,7 @@ export function PlannerCalendar({ date, data, busy, onSelectDate, onManage, onCh
               onClick={() => onSelectDate(start)}
               title={`${task.title} · ${dateLabel(task.date)} – ${dateLabel(taskEnd)}`}
             >
-              {task.date < from && <span aria-hidden="true">‹</span>}<span className="week-period-title">{task.title}</span>{task.subtasks.length > 0 ? <small>{task.subtasks.filter(child => child.done).length}/{task.subtasks.length}</small> : task.done ? <Check size={12} /> : null}{taskEnd > to && <span aria-hidden="true">›</span>}
+              {task.date < from && <span aria-hidden="true">‹</span>}<span className="week-period-title"><span>{task.title}</span>{task.projectTitle && <small className="calendar-project-label"><i className="project-color-dot" aria-hidden="true" />{task.projectTitle}</small>}</span>{task.subtasks.length > 0 ? <small>{task.subtasks.filter(child => child.done).length}/{task.subtasks.length}</small> : task.done ? <Check size={12} /> : null}{taskEnd > to && <span aria-hidden="true">›</span>}
             </button>
             {week.slice(column - 1, column - 1 + span).map((key, index) => {
               const children = task.subtasks.filter(child => child.date === key);
@@ -160,18 +161,19 @@ export function PlannerCalendar({ date, data, busy, onSelectDate, onManage, onCh
             const last = task.endDate === key || key === to;
             const end = task.endDate! < to ? task.endDate! : to;
             const days = (Date.parse(end) - Date.parse(key)) / 86_400_000 + 1;
-            return <span key={index} className={`calendar-period-bar task-color ${task.date === key ? "period-start" : ""} ${task.endDate === key ? "period-end" : ""} ${task.done ? "period-done" : ""}`} style={{ "--task-hue": taskHue(task.id) } as CSSProperties} title={`${task.title} · ${dateLabel(task.date)} – ${dateLabel(task.endDate!)}`}>
+            return <span key={index} className={`calendar-period-bar task-color ${task.projectId ? "" : "task-unassigned"} ${task.date === key ? "period-start" : ""} ${task.endDate === key ? "period-end" : ""} ${task.done ? "period-done" : ""}`} style={{ "--task-hue": taskHue(task) } as CSSProperties} title={`${task.title}${task.projectTitle ? ` · ${task.projectTitle}` : ""} · ${dateLabel(task.date)} – ${dateLabel(task.endDate!)}`}>
               {first && <span className="calendar-period-label" style={{ "--period-days": days } as CSSProperties}>{task.date < key ? "‹ " : ""}{task.done ? "✓ " : ""}{task.title}</span>}
               {last && task.endDate! > key && <span className="calendar-period-continues">›</span>}
             </span>;
           })}</span>}
           <span className="calendar-cell-items" aria-hidden="true">
-            {groups.slice(0, 2).map(({ task, items }) => <span className={`calendar-month-group task-color ${task.subtasks.length ? "has-children" : ""}`} key={task.id} style={{ "--task-hue": taskHue(task.id) } as CSSProperties} title={task.title}>
+            {groups.slice(0, 2).map(({ task, items }) => <span className={`calendar-month-group task-color ${task.projectId ? "" : "task-unassigned"} ${task.subtasks.length ? "has-children" : ""}`} key={task.id} style={{ "--task-hue": taskHue(task) } as CSSProperties} title={task.title}>
               {task.subtasks.length > 0 && <span className="calendar-month-parent">{task.title}</span>}
               <span className={task.subtasks.length ? "calendar-month-children" : ""}>{items.slice(0, 2).map(item => <span className={`calendar-chip calendar-task ${item.done ? "calendar-done" : ""}`} key={item.id} title={item.title}>
                 {item.done ? <Check size={10} /> : <Square size={10} />}<span>{item.title}</span>
               </span>)}</span>
               {items.length > 2 && <span className="calendar-group-more">+{items.length - 2}개</span>}
+              {task.projectTitle && <span className="calendar-project-label"><i className="project-color-dot" aria-hidden="true" />{task.projectTitle}</span>}
             </span>)}
             {events.slice(0, 2).map(item => <span className="calendar-chip calendar-event" key={milestoneKey(item)} title={`${item.sourceName} · ${item.title}`}><CalendarDays size={10} /><span>{item.title}</span></span>)}
             {extra > 0 && <span className="calendar-more">+{extra}개</span>}
@@ -179,6 +181,12 @@ export function PlannerCalendar({ date, data, busy, onSelectDate, onManage, onCh
         </CalendarDayButton>;
       } }}
     />}
+    {projectGroups.length > 0 && <section className="calendar-projects" aria-label={`${view === "week" ? "이번 주" : "이번 달"} 프로젝트별 할 일`}>
+      <h3>프로젝트</h3><ul>{projectGroups.map(project => <li key={project.id ?? "unassigned"} className={`task-color ${project.id ? "" : "task-unassigned"}`} style={{ "--task-hue": taskHue(project.id ?? "unassigned") } as CSSProperties}>
+        <span className="project-color-dot" aria-hidden="true" /><span className="calendar-project-name">{project.title}</span><small>{project.completed}/{project.total} 완료</small>
+        <progress max={project.total} value={project.completed} aria-label={`${project.title} 할 일 ${project.total}개 중 ${project.completed}개 완료`} />
+      </li>)}</ul>
+    </section>}
     {loading && !current && <p className="calendar-status" role="status">달력 불러오는 중…</p>}
     {view === "month" && <div className="calendar-selected-events">
       <h3>{dateLabel(date)} <span>Google 일정</span></h3>

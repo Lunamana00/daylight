@@ -2,11 +2,12 @@
 export type Identity = { userId: string; email: string; fullName?: string | null };
 export type Member = { id: string; name: string };
 export type Subtask = { id: string; taskId: string; date: string; title: string; done: number };
-export type Task = { id: string; ownerId: string; date: string; endDate: string | null; title: string; done: number; important: number; createdAt: string; updatedAt: string; ownerName: string; subtasks: Subtask[] };
+export type Task = { id: string; ownerId: string; date: string; endDate: string | null; title: string; done: number; important: number; createdAt: string; updatedAt: string; ownerName: string; subtasks: Subtask[]; projectId?: string | null; projectTitle?: string | null };
+export type TaskProject = { id: string; title: string };
 export type Note = { ownerId: string; date: string; content: string; updatedAt: string; ownerName: string };
 export type Milestone = { ownerId: string; calendarId: string; eventId: string; title: string; date: string; url: string | null; ownerName: string; sourceName: string; syncedAt: string };
 export type Source = { ownerId: string; calendarId: string; name: string; syncedAt: string; ownerName: string };
-export type DayData = { date: string; me: Member; members: Member[]; tasks: Task[]; notes: Note[]; milestones: Milestone[]; sources: Source[]; calendarSync?: Array<{ calendarId: string; enabled: boolean; canManage: boolean; error: string | null }> };
+export type DayData = { date: string; me: Member; members: Member[]; tasks: Task[]; projects?: TaskProject[]; notes: Note[]; milestones: Milestone[]; sources: Source[]; calendarSync?: Array<{ calendarId: string; enabled: boolean; canManage: boolean; error: string | null }> };
 export type CalendarData = { from: string; to: string; tasks: Task[]; milestones: Milestone[] };
 export const milestoneKey = (item: { calendarId: string; eventId: string }) => JSON.stringify([item.calendarId, item.eventId]);
 
@@ -39,10 +40,10 @@ export async function ensureMember(db: D1Database, user: Identity) {
   await db.prepare("INSERT INTO members (id,name,email,joined_at) VALUES (?,?,?,?) ON CONFLICT(id) DO UPDATE SET email=excluded.email")
     .bind(user.userId, (user.fullName || user.email.split("@")[0]).slice(0, 40), user.email, new Date().toISOString()).run();
 }
-async function readTasks(db: D1Database, from: string, to: string, ownerId: string | null = null): Promise<Task[]> {
+async function readTasks(db: D1Database, from: string, to: string, ownerId: string | null = null, projectOwnerId = ownerId): Promise<Task[]> {
   const where = "t.date<=? AND COALESCE(t.end_date,t.date)>=? AND (? IS NULL OR t.owner_id=?)";
   const [tasks, children] = await Promise.all([
-    db.prepare(`SELECT t.id,t.owner_id AS ownerId,t.date,t.end_date AS endDate,t.title,t.done,t.important,t.created_at AS createdAt,t.updated_at AS updatedAt,p.name AS ownerName FROM tasks t JOIN members p ON p.id=t.owner_id WHERE ${where} ORDER BY t.created_at,t.rowid`).bind(to, from, ownerId, ownerId).all<Task>(),
+    db.prepare(`SELECT t.id,t.owner_id AS ownerId,t.date,t.end_date AS endDate,t.title,t.done,t.important,t.created_at AS createdAt,t.updated_at AS updatedAt,p.name AS ownerName,a.id AS projectId,a.title AS projectTitle FROM tasks t JOIN members p ON p.id=t.owner_id LEFT JOIN work_task_links l ON l.task_id=t.id LEFT JOIN work_artifacts a ON a.id=l.artifact_id AND a.owner_id=t.owner_id AND a.owner_id=? WHERE ${where} ORDER BY t.created_at,t.rowid`).bind(projectOwnerId, to, from, ownerId, ownerId).all<Task>(),
     db.prepare(`SELECT s.id,s.task_id AS taskId,s.date,s.title,s.done FROM task_subtasks s JOIN tasks t ON t.id=s.task_id WHERE ${where} ORDER BY s.date,s.created_at,s.rowid`).bind(to, from, ownerId, ownerId).all<Subtask>(),
   ]);
   const grouped = new Map<string, Subtask[]>();
@@ -96,10 +97,22 @@ export function calendarWeekOffsets(cards: Array<{ column: number; span: number;
     return top;
   });
 }
-export function taskHue(id: string) {
+export function taskHue(task: string | Pick<Task, "id" | "projectId">) {
+  const id = typeof task === "string" ? task : task.projectId ?? task.id;
   let hash = 0;
   for (const character of id) hash = (Math.imul(hash, 31) + character.charCodeAt(0)) >>> 0;
   return [148, 218, 278, 28, 328, 178, 55, 245][hash % 8];
+}
+export function calendarProjects(tasks: Task[]) {
+  const groups = new Map<string, { id: string | null; title: string; total: number; completed: number }>();
+  for (const task of tasks) {
+    const key = task.projectId ?? "";
+    const group = groups.get(key) ?? { id: task.projectId ?? null, title: task.projectTitle ?? "프로젝트 미지정", total: 0, completed: 0 };
+    group.total += 1;
+    group.completed += Number(Boolean(task.done));
+    groups.set(key, group);
+  }
+  return [...groups.values()];
 }
 export function calendarTaskGroups(tasks: Task[], date: string) {
   return tasks.map(task => ({ task, items: dailyTaskItems([task], date) }))
@@ -124,14 +137,15 @@ export async function readDay(db: D1Database, user: Identity, date: string, pers
   day(date);
   await ensureMember(db, user);
   const calendarOwner = personalCalendars ? user.userId : null;
-  const [people, tasks, notes, milestones, sources] = await Promise.all([
+  const [people, tasks, notes, milestones, sources, projects] = await Promise.all([
     db.prepare("SELECT id,name FROM members ORDER BY joined_at,id").all<Member>(),
-    readTasks(db, date, date),
+    readTasks(db, date, date, null, user.userId),
     db.prepare("SELECT n.owner_id AS ownerId,n.date,n.content,n.updated_at AS updatedAt,p.name AS ownerName FROM notes n JOIN members p ON p.id=n.owner_id WHERE n.date=? AND (? IS NULL OR n.owner_id=?)").bind(date, calendarOwner, calendarOwner).all<Note>(),
     listMilestones(db, date, addDays(date, 90) > "2100-12-31" ? "2100-12-31" : addDays(date, 90), calendarOwner ?? undefined),
     db.prepare("SELECT s.owner_id AS ownerId,s.calendar_id AS calendarId,s.name,s.synced_at AS syncedAt,p.name AS ownerName FROM calendar_sources s JOIN members p ON p.id=s.owner_id WHERE (? IS NULL OR s.owner_id=?) ORDER BY s.synced_at DESC").bind(calendarOwner, calendarOwner).all<Source>(),
+    db.prepare("SELECT id,title FROM work_artifacts WHERE owner_id=? ORDER BY title,id").bind(user.userId).all<TaskProject>(),
   ]);
-  return { date, me: people.results.find(p => p.id === user.userId)!, members: people.results, tasks, notes: notes.results, milestones, sources: sources.results };
+  return { date, me: people.results.find(p => p.id === user.userId)!, members: people.results, tasks, projects: projects.results, notes: notes.results, milestones, sources: sources.results };
 }
 export function monthRange(date: string) {
   day(date);
@@ -173,7 +187,11 @@ export async function change(db: D1Database, user: Identity, input: Record<strin
     const id = crypto.randomUUID();
     const date = day(input.date), endDate = input.endDate == null ? null : day(input.endDate);
     if (endDate && endDate < date) throw new PlannerError("종료일은 시작일 이후로 선택해주세요.");
-    await db.prepare("INSERT INTO tasks (id,owner_id,date,end_date,title,done,important,created_at,updated_at) VALUES (?,?,?,?,?,0,?,?,?)").bind(id, user.userId, date, endDate, text(input.title, "할 일", 240), input.important === undefined ? 0 : bool(input.important), now, now).run();
+    const projectId = input.projectId == null ? null : text(input.projectId, "프로젝트", 100);
+    if (projectId && !(await db.prepare("SELECT id FROM work_artifacts WHERE id=? AND owner_id=?").bind(projectId, user.userId).all()).results.length) throw new PlannerError("본인의 프로젝트를 선택해 주세요.", 403);
+    const statements = [db.prepare("INSERT INTO tasks (id,owner_id,date,end_date,title,done,important,created_at,updated_at) VALUES (?,?,?,?,?,0,?,?,?)").bind(id, user.userId, date, endDate, text(input.title, "할 일", 240), input.important === undefined ? 0 : bool(input.important), now, now)];
+    if (projectId) statements.push(db.prepare("INSERT INTO work_task_links (task_id,artifact_id) VALUES (?,?)").bind(id, projectId));
+    await db.batch(statements);
     return { id };
   }
   if (input.op === "subtask.add" || input.op === "subtask.patch" || input.op === "subtask.delete") {
