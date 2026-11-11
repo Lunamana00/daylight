@@ -49,6 +49,8 @@ Invitations are saved in D1. They apply to the web and Mac app. Only the owner c
 
 Basic Google sign-in uses only `openid` and `email`. Calendar access has a separate consent flow. While the Google OAuth app is in Testing, a new person needs to be added to the Google test user list before they can connect their calendar.
 
+To use daylight invitations without a separate Google test user list, publish the Google OAuth app as **In production**. Set its homepage to the Worker origin. Set its privacy policy to `/privacy` and its terms to `/terms` on the same origin. Review the public contact details before publication. The app still permits invited accounts only. Each person must consent to calendar access. Google can show an unverified-app warning and apply a 100-user limit until verification is complete.
+
 ## Connect personal calendars
 
 1. Enable Google Calendar API in the Google Cloud project. If the OAuth app is in Testing, add the Google account as a test user.

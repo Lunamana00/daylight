@@ -3,7 +3,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "daylight",
-  description: "일일 할 일과 팀 마일스톤",
+  description: "할 일, 개인 일정, 프로젝트 기록을 정리하는 플래너",
   icons: {
     icon: "/favicon.svg",
     shortcut: "/favicon.svg",

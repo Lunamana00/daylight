@@ -46,6 +46,7 @@ export default async function CalendarPage() {
         })}
       </fieldset>
       <p className="tiny muted">본인에게만 보이며 5분마다 동기화됩니다. 최대 20개를 선택할 수 있어요. 선택을 해제해도 가져온 일정은 남습니다.</p>
+      <a className="text-button self-start" href="/privacy" target="_blank" rel="noreferrer">캘린더 정보의 이용·보관·삭제 안내</a>
       <button className="button primary self-start" type="submit">선택한 캘린더 자동 동기화</button>
     </form>}
   </main>;

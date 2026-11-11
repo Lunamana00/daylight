@@ -346,3 +346,19 @@ input:focus-visible,textarea:focus-visible,select:focus-visible{outline:2px soli
   .task-item,.task-item:last-child{padding-left:10px;padding-right:10px}
   .task-project-picker{max-width:70%}
 }
+
+.welcome-page{display:flex;flex-direction:column;align-items:flex-start;justify-content:center;gap:24px;max-width:560px;min-height:100dvh;padding:48px 28px}
+.welcome-brand{display:flex;align-items:center;gap:10px}
+.welcome-brand h1{font-size:25px;letter-spacing:-.7px}
+.welcome-page>p{font-size:16px;line-height:1.7}
+.welcome-page ul{padding-left:19px;color:var(--text-secondary);font-size:13px;line-height:1.9}
+.welcome-page li+li{margin-top:8px}
+.welcome-page footer{display:flex;flex-wrap:wrap;gap:18px;font-size:12px;color:var(--muted)}
+.welcome-page footer a:hover{text-decoration:underline}
+.public-document{max-width:760px;padding:48px 28px 80px;line-height:1.85}
+.public-document h1{font-size:27px;margin:28px 0 32px;letter-spacing:-.7px}
+.public-document section{margin:28px 0}
+.public-document h2{font-size:16px;font-weight:650;margin-bottom:10px}
+.public-document p{font-size:14px;color:var(--text-secondary)}
+.public-document p+p{margin-top:12px}
+.public-document p a{color:var(--accent);text-decoration:underline;text-underline-offset:3px}
