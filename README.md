@@ -4,8 +4,8 @@ Set your own daily tasks. See what other people plan and complete.
 
 - **서로의 오늘** shows each person's tasks and completion state.
 - **내 할 일** shows your tasks first and the weekly calendar below them. Add, edit, complete, delete, or move your own tasks to the next day. Select a date in the calendar to show that day's tasks. Other people cannot change your tasks.
-- Set a start date and an end date in the task form. Add dated subtasks under the task. The task appears on each date in its period. Complete each subtask to update total progress.
-- Completed tasks move to the bottom. Drag the handle to change task order. You can also use the arrow keys on the handle or the move commands in the task menu. Use the arrow buttons to move subtasks. The server saves the order. The calendar and Mac widget use this order. If you undo completion, the task returns to its saved position.
+- Set a start date and an end date in the task form. The calendar shows the full period. Select the period bar in the weekly calendar to edit the task or add dated subtasks. Only subtasks scheduled for the selected day appear in the daily list and Mac widget. A period without subtasks does not count as a daily task. Complete each subtask to update total progress.
+- Completed tasks move to the bottom. Drag the handle to change task order. The full card follows the pointer. A blue line shows where it will go. You can also use the arrow keys on the handle or the move commands in the task menu. Use the arrow buttons to move subtasks. The server saves the order. The calendar and Mac widget use this order. If you undo completion, the task returns to its saved position.
 - The calendar opens in **주간** view. It shows task periods above the dated tasks and subtasks. Use the checkboxes to complete them. Select **월간** for a month overview. The calendar shows your Google events and daily tasks. Only your account can read your calendar events. They do not become daily tasks.
 - Google sign-in permits invited accounts only. The Mac widget uses the same account and server.
 

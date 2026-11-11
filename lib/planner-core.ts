@@ -59,7 +59,7 @@ async function readTasks(db: D1Database, from: string, to: string, ownerId: stri
 export function dailyTaskItems(tasks: Task[], date: string): Array<{ id: string; title: string; done: boolean; parentTitle: string | null; subtask: boolean }> {
   return tasks.flatMap<{ id: string; title: string; done: boolean; parentTitle: string | null; subtask: boolean }>(task => task.subtasks.length
     ? task.subtasks.filter(child => child.date === date).map(child => ({ id: child.id, title: child.title, done: Boolean(child.done), parentTitle: task.title, subtask: true }))
-    : task.date <= date && (task.endDate ?? task.date) >= date
+    : (!task.endDate || task.endDate === task.date) && task.date === date
       ? [{ id: task.id, title: task.title, done: Boolean(task.done), parentTitle: null, subtask: false }]
       : []
   ).sort((a, b) => Number(a.done) - Number(b.done));
@@ -191,7 +191,10 @@ export async function change(db: D1Database, user: Identity, input: Record<strin
     const ordered = siblings.filter(item => item.done === source.done);
     const positions = ordered.map(item => item.sortOrder);
     const from = ordered.findIndex(item => item.id === id), to = ordered.findIndex(item => item.id === targetId);
-    ordered.splice(to, 0, ordered.splice(from, 1)[0]);
+    if (input.position !== undefined && input.position !== "before" && input.position !== "after") throw new PlannerError("올바른 이동 위치가 아닙니다.");
+    const [moving] = ordered.splice(from, 1);
+    const targetIndex = ordered.findIndex(item => item.id === targetId);
+    ordered.splice(input.position === undefined ? to : targetIndex + Number(input.position === "after"), 0, moving);
     await db.batch(ordered.map((item, index) => isChild
       ? db.prepare("UPDATE task_subtasks SET sort_order=?,updated_at=? WHERE id=? AND task_id IN (SELECT id FROM tasks WHERE owner_id=?)").bind(positions[index], now, item.id, user.userId)
       : db.prepare("UPDATE tasks SET sort_order=?,updated_at=? WHERE id=? AND owner_id=?").bind(positions[index], now, item.id, user.userId)));

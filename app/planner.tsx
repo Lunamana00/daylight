@@ -9,7 +9,7 @@ import { PlannerTask } from "../components/planner-task";
 import { WorkLog } from "../components/work-log";
 
 type View = "mine" | "together" | "work";
-type Modal = "connections" | "share" | "delete" | null;
+type Modal = "connections" | "share" | "delete" | "task" | null;
 type Invitations = { canInvite: boolean; invitations: Array<{ email: string; joined: number }> };
 const shortDate = (date: string) => new Intl.DateTimeFormat("ko-KR", { month: "long", day: "numeric" }).format(new Date(date + "T00:00:00Z"));
 const longDate = (date: string) => new Intl.DateTimeFormat("ko-KR", { year: "numeric", month: "long", day: "numeric", weekday: "long", timeZone: "UTC" }).format(new Date(date + "T00:00:00Z"));
@@ -38,12 +38,14 @@ export default function Planner({ googleLogin = false }: { googleLogin?: boolean
   const [inviteError, setInviteError] = useState("");
   const [inviteMessage, setInviteMessage] = useState("");
   const [busy, setBusy] = useState(false);
+  const [draggedTask, setDraggedTask] = useState<Pick<Task, "id" | "done"> | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
   const [toast, setToast] = useState("");
   const [modal, setModal] = useState<Modal>(null);
   const [deleteTask, setDeleteTask] = useState<Task | null>(null);
   const [deleteChild, setDeleteChild] = useState<Subtask | null>(null);
+  const [calendarTask, setCalendarTask] = useState<Task | null>(null);
   const dateRef = useRef(date);
   const sequence = useRef(0);
   const taskInput = useRef<HTMLTextAreaElement>(null);
@@ -69,11 +71,11 @@ export default function Planner({ googleLogin = false }: { googleLogin?: boolean
     void load(date);
   }, [date, load, view]);
   useEffect(() => {
-    const refresh = () => { if (!document.hidden && !busy) void load(dateRef.current); };
+    const refresh = () => { if (!document.hidden && !busy && !draggedTask) void load(dateRef.current); };
     const timer = setInterval(refresh, 30_000);
     window.addEventListener("focus", refresh);
     return () => { clearInterval(timer); window.removeEventListener("focus", refresh); };
-  }, [busy, load]);
+  }, [busy, draggedTask, load]);
   useEffect(() => {
     if (!toast) return;
     const timer = setTimeout(() => setToast(""), 3500);
@@ -139,7 +141,8 @@ export default function Planner({ googleLogin = false }: { googleLogin?: boolean
     try { await navigator.clipboard.writeText(value); setToast(message); }
     catch { setError("복사하지 못했어요. 아래 내용을 직접 선택해 복사해주세요."); }
   }
-  const myTasks = data?.tasks.filter(task => task.ownerId === data.me.id) || [];
+  const myTasks = data?.tasks.filter(task => task.ownerId === data.me.id && dailyTaskItems([task], date).length > 0) || [];
+  const inspectedTask = data?.tasks.find(task => task.id === calendarTask?.id) ?? calendarTask;
   const dailyItems = dailyTaskItems(myTasks, date);
   const completed = dailyItems.filter(task => task.done).length;
   const ownFiltered = myTasks.filter(task => filter === "all" || dailyTaskItems([task], date).some(item => filter === "done" ? item.done : !item.done));
@@ -148,10 +151,14 @@ export default function Planner({ googleLogin = false }: { googleLogin?: boolean
   const week = Array.from({ length: 7 }, (_, i) => addDays(monday, i));
   const connectionPrompt = calendarName.trim() ? `daylight 사이트 ${typeof window !== "undefined" ? window.location.origin : ""}의 연결된 도구를 사용해줘. Google Calendar에서 내가 팀에 공유할 마일스톤용으로 지정하는 캘린더 ${JSON.stringify(calendarName.trim())}만 읽어서, 한국 시간 오늘부터 90일 뒤까지의 마일스톤을 daylight에 동기화해줘. 페이지가 여러 개면 끝까지 읽고 성공한 뒤에만 sync_google_calendar_milestones를 호출해. 이 캘린더 일정이 사이트의 모든 팀원에게 공유되는 것을 허용해. 일정의 원래 ID와 제목을 유지하고, 종일 일정은 start.date, 시간 일정은 한국 시간 시작 날짜를 사용해. Google 캘린더에는 아무것도 쓰지 마. 내가 직접 작성한 일일 할 일은 get_daily_plan으로 읽기만 하고 추가·수정·완료 처리하지 마. 자동 실행은 아직 설정하지 마.` : "";
 
-  function taskRow(task: Task, readOnly = false) {
+  function taskRow(task: Task, readOnly = false, managePeriod = false) {
     const ordered = (view === "mine" ? ownFiltered : myTasks).filter(item => item.done === task.done);
     const index = ordered.findIndex(item => item.id === task.id);
-    return <PlannerTask key={`${date}-${task.id}`} task={task} projects={data?.projects ?? []} date={date} busy={busy} readOnly={readOnly} previousTaskId={ordered[index - 1]?.id} nextTaskId={ordered[index + 1]?.id} onChange={mutate} onOpenWorkLog={readOnly ? undefined : task => { setWorkTask(task); setView("work"); }} onDelete={(parent, child) => { setDeleteTask(parent); setDeleteChild(child ?? null); setModal("delete"); }} />;
+    return <PlannerTask key={`${date}-${task.id}`} task={task} projects={data?.projects ?? []} date={date} busy={busy} readOnly={readOnly} reorderable={!managePeriod} previousTaskId={ordered[index - 1]?.id} nextTaskId={ordered[index + 1]?.id} draggedTask={draggedTask} onDragStart={() => setDraggedTask({ id: task.id, done: task.done })} onDragEnd={() => setDraggedTask(null)} onChange={async (input, message) => {
+      const saved = await mutate(input, message);
+      if (saved && managePeriod && input.op === "task.patch" && typeof input.date === "string") selectDate(input.date);
+      return saved;
+    }} onOpenWorkLog={readOnly ? undefined : task => { setWorkTask(task); setView("work"); setModal(null); }} onDelete={(parent, child) => { setDeleteTask(parent); setDeleteChild(child ?? null); setModal("delete"); }} />;
   }
 
   return <div className="app-shell">
@@ -184,7 +191,7 @@ export default function Planner({ googleLogin = false }: { googleLogin?: boolean
               <div className="task-progress"><span style={{ width: `${dailyItems.length ? completed / dailyItems.length * 100 : 0}%` }} /></div>
               <form className="task-composer" onSubmit={async event => {
                 event.preventDefault();
-                if (await mutate({ op: "task.add", date: periodStart, endDate: periodEnd === periodStart ? null : periodEnd, title: draft, projectId: draftProject || null })) {
+                if (await mutate({ op: "task.add", date: periodStart, endDate: periodEnd === periodStart ? null : periodEnd, title: draft, projectId: draftProject || null }, periodEnd > periodStart ? "기간을 달력에 추가했어요." : undefined)) {
                   setDraft("");
                   setFilter("all");
                   selectDate(periodStart);
@@ -200,9 +207,12 @@ export default function Planner({ googleLogin = false }: { googleLogin?: boolean
               <div className="task-filter" aria-label="할 일 필터">{[["all", "전체"], ["open", "할 일"], ["done", "완료"]].map(([key, label]) => <button key={key} className={filter === key ? "selected" : ""} onClick={() => setFilter(key)}>{label}{key === "done" && <span>{completed}</span>}</button>)}</div>
               {ownFiltered.length ? <ul className="task-list">{ownFiltered.map(task => taskRow(task))}</ul> : <p className="empty-tasks">{myTasks.length ? filter === "done" ? "완료한 할 일 없음" : "남은 할 일 없음" : "할 일 없음"}</p>}
             </section> : <p className="calendar-status" role="status">{error ? "이 날짜의 할 일을 불러오지 못했어요." : "할 일 불러오는 중…"}</p>)}
-            {view === "mine" && <PlannerCalendar date={date} data={data} busy={busy} onChange={mutate} onSelectDate={selectDate} onManage={() => setModal("connections")} />}
+            {view === "mine" && <PlannerCalendar date={date} data={data} busy={busy} onChange={mutate} onSelectDate={selectDate} onManage={() => setModal("connections")} onOpenTask={task => {
+              selectDate(date >= task.date && date <= (task.endDate ?? task.date) ? date : task.date);
+              setCalendarTask(task); setModal("task");
+            }} />}
             {view === "together" && <><div className="together-view-heading"><h2>서로의 오늘 <span>{data.members.length}명</span></h2></div><div className="person-filters"><button className={person === "all" ? "selected" : ""} onClick={() => setPerson("all")}>모두</button>{data.members.map((member, i) => <button className={person === member.id ? "selected" : ""} key={member.id} onClick={() => setPerson(member.id)}><Avatar name={member.name} index={i} small />{member.name}</button>)}</div>{data.members.filter(member => person === "all" || person === member.id).map((member, i) => {
-              const tasks = data.tasks.filter(task => task.ownerId === member.id);
+              const tasks = data.tasks.filter(task => task.ownerId === member.id && dailyTaskItems([task], date).length > 0);
               const items = dailyTaskItems(tasks, date);
               const count = items.filter(task => task.done).length;
               return <section key={member.id} className="card member-card"><div className="member-card-heading"><Avatar name={member.name} index={i} /><div><h3>{member.name}{member.id === data.me.id && <span className="me-label">나</span>}</h3><span>{items.length ? `${items.length - count}개 남음 · ${count}개 완료` : "오늘 할 일 없음"}</span></div><span className="member-percent">{items.length ? Math.round(count / items.length * 100) : 0}<small>%</small></span></div>{tasks.length > 0 && <><div className="task-progress"><span style={{ width: `${items.length ? count / items.length * 100 : 0}%` }} /></div><ul className="task-list">{tasks.map(task => taskRow(task, task.ownerId !== data.me.id))}</ul></>}</section>;
@@ -212,7 +222,8 @@ export default function Planner({ googleLogin = false }: { googleLogin?: boolean
       </main>
     </div>
     {toast && <div className="toast" role="status"><Check size={16} />{toast}</div>}
-    <dialog ref={dialog} className="app-dialog" onCancel={() => setModal(null)} aria-labelledby="dialog-title" onClick={event => { if (event.target === event.currentTarget) setModal(null); }}><div className="dialog-inner"><div className="dialog-heading"><h2 id="dialog-title">{modal === "connections" ? "나의 프로필과 연결" : modal === "share" ? "사이트 공유" : "할 일을 삭제할까요?"}</h2><button className="icon-button" aria-label="닫기" onClick={() => setModal(null)}><X size={19} /></button></div>
+    <dialog ref={dialog} className="app-dialog" onCancel={() => setModal(null)} aria-labelledby="dialog-title" onClick={event => { if (event.target === event.currentTarget) setModal(null); }}><div className="dialog-inner"><div className="dialog-heading"><h2 id="dialog-title">{modal === "connections" ? "나의 프로필과 연결" : modal === "share" ? "사이트 공유" : modal === "task" ? "기간 할 일" : "할 일을 삭제할까요?"}</h2><button className="icon-button" aria-label="닫기" onClick={() => setModal(null)}><X size={19} /></button></div>
+      {modal === "task" && inspectedTask && <ul className="task-list period-task-editor">{taskRow(inspectedTask, false, true)}</ul>}
       {modal === "connections" && <><form className="profile-form" onSubmit={async event => { event.preventDefault(); await mutate({ op: "profile.save", name: nameDraft }, "이름을 저장했어요."); }}><label htmlFor="profile-name">다른 사람에게 보이는 이름</label><div><input id="profile-name" value={nameDraft} onChange={event => setNameDraft(event.target.value)} maxLength={40} required /><button className="button secondary compact" disabled={busy}>저장</button></div></form>
         {googleLogin ? <><form method="post" action="/auth/google/calendar">
           <button className="button primary full" type="submit" disabled={busy}>

@@ -5,16 +5,17 @@ import { CalendarDays, Check, ChevronLeft, ChevronRight, ExternalLink, Square } 
 import { ko } from "react-day-picker/locale";
 import { Calendar, CalendarDayButton } from "./ui/calendar";
 import { addDays, calendarProjects, calendarTaskGroups, calendarTaskLanes, calendarWeekLayout, calendarWeekOffsets, milestoneKey, monthRange, taskHue, today, weekRange } from "../lib/planner-core";
-import type { CalendarData, DayData } from "../lib/planner-core";
+import type { CalendarData, DayData, Task } from "../lib/planner-core";
 
 const calendarDate = (value: string) => new Date(value + "T00:00:00+09:00");
 const dateLabel = (value: string) => new Intl.DateTimeFormat("ko-KR", { month: "long", day: "numeric", timeZone: "Asia/Seoul" }).format(calendarDate(value));
 const firstDate = calendarDate("2000-01-01");
 const lastDate = calendarDate("2100-09-01");
 
-export function PlannerCalendar({ date, data, busy, onSelectDate, onManage, onChange }: {
+export function PlannerCalendar({ date, data, busy, onSelectDate, onManage, onChange, onOpenTask }: {
   date: string; data: DayData; busy: boolean; onSelectDate: (date: string) => void; onManage: () => void;
   onChange: (input: Record<string, unknown>) => Promise<boolean>;
+  onOpenTask: (task: Task) => void;
 }) {
   const month = date.slice(0, 7);
   const [view, setView] = useState<"week" | "month">("week");
@@ -97,7 +98,7 @@ export function PlannerCalendar({ date, data, busy, onSelectDate, onManage, onCh
               data-joins-end={task.subtasks.some(child => child.date === end)}
               style={{ gridColumn: "1 / -1", gridRow: 1 }}
               disabled={busy}
-              onClick={() => onSelectDate(start)}
+              onClick={() => onOpenTask(task)}
               title={`${task.title} · ${dateLabel(task.date)} – ${dateLabel(taskEnd)}`}
             >
               {task.date < from && <span aria-hidden="true">‹</span>}<span className="week-period-title">{task.projectTitle && <small className="calendar-project-label"><i className="project-color-dot" aria-hidden="true" />{task.projectTitle}</small>}<span>{task.title}</span></span>{task.subtasks.length > 0 ? <small>{task.subtasks.filter(child => child.done).length}/{task.subtasks.length}</small> : task.done ? <Check size={12} /> : null}{taskEnd > to && <span aria-hidden="true">›</span>}

@@ -13,7 +13,7 @@ const localTime = () => new Date(Date.now() - new Date().getTimezoneOffset() * 6
 const stageLabels = { planned: "예정", active: "진행 중", done: "완료" };
 async function api<T>(path = "", input?: Record<string, unknown>): Promise<T> {
   const response = await fetch("/api/worklog" + path, input ? { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input) } : { cache: "no-store" });
-  const value = await response.json();
+  const value = await response.json() as T & { error?: string };
   if (!response.ok) throw new Error(value.error || "작업 기록을 불러오지 못했어요.");
   return value as T;
 }
@@ -25,7 +25,7 @@ async function attach(entryId: string, file: File) {
   if (file.size > 10 * 1024 * 1024) throw new Error(`${file.name}은 10MB를 넘어요.`);
   const body = new FormData(); body.set("entryId", entryId); body.set("file", file);
   const response = await fetch("/api/worklog/files", { method: "POST", body });
-  const value = await response.json();
+  const value = await response.json() as { error?: string };
   if (!response.ok) throw new Error(value.error || "파일을 올리지 못했어요.");
 }
 
@@ -98,7 +98,7 @@ function WorkDetailView({ artifact, artifacts, task, onClearTask, onOpenTask, on
   const change = (input: Record<string, unknown>) => run(async () => { await api("", input); });
   async function exportFile(portfolio: boolean) {
     const response = await fetch(`/api/worklog?artifactId=${encodeURIComponent(artifactId)}&export=${portfolio ? "portfolio" : "timeline"}`, { cache: "no-store" });
-    if (!response.ok) throw new Error((await response.json()).error);
+    if (!response.ok) throw new Error((await response.json() as { error?: string }).error);
     download(`${artifact!.title.replace(/[\\/:*?"<>|]/g, "-")}-${portfolio ? "포트폴리오" : "기록"}.md`, await response.text());
   }
   const materials = view === "materials";
@@ -233,7 +233,7 @@ function EntryCard({ entry, artifacts, detail, materials, busy, uploadsAvailable
     {!!entry.links.length && <ul className="work-links">{entry.links.map((link, i) => <li key={i}><a href={link.url} target="_blank" rel="noreferrer"><ExternalLink size={13} />{link.label}</a></li>)}</ul>}
     {!!entry.files.length && <ul className="work-files">{entry.files.map(file => <li key={file.id}>
       <a href={`/api/worklog/files/${file.id}`} target="_blank" rel="noreferrer">{file.contentType.startsWith("image/") ? <img src={`/api/worklog/files/${file.id}?preview=1`} alt={file.fileName} loading="lazy" /> : <FileText size={28} />}<span>{file.fileName}<small>{(file.size / 1024).toFixed(0)} KB · {stamp(file.createdAt)}</small></span><Download size={13} /></a>
-      <button className="icon-button" aria-label={`${file.fileName} 삭제`} disabled={busy} onClick={() => void run(async () => { const response = await fetch(`/api/worklog/files/${file.id}`, { method: "DELETE" }); if (!response.ok) throw new Error((await response.json()).error); })}><X size={12} /></button>
+      <button className="icon-button" aria-label={`${file.fileName} 삭제`} disabled={busy} onClick={() => void run(async () => { const response = await fetch(`/api/worklog/files/${file.id}`, { method: "DELETE" }); if (!response.ok) throw new Error((await response.json() as { error?: string }).error); })}><X size={12} /></button>
     </li>)}</ul>}
     <details className={materials ? "work-material-edit" : "work-entry-tools"} open={!materials}><summary>자료 편집</summary>
     <div className="work-entry-actions">{entry.sourceUrl && <a className="text-button" href={entry.sourceUrl} target="_blank" rel="noreferrer">원문<ExternalLink size={11} /></a>}<button className="text-button" disabled={busy} onClick={() => setEditing(!editing)}>{materials ? "이름·메모 수정" : "기록 수정"}</button>

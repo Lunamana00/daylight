@@ -173,7 +173,8 @@ assert.deepEqual(calendarProjects(projectCalendar.tasks).find(project => project
 assert.equal(calendarProjects(projectCalendar.tasks).length, 1, 'Unassigned tasks are not a project');
 assert.deepEqual(calendarProjects(projectCalendar.tasks.filter(task => !task.projectId)), [], 'No project summary remains when every task is unassigned');
 const projectWidget = widgetPlan(projectPlan);
-assert.deepEqual(projectWidget.tasks.filter(task => task.id !== unassignedTask.id).map(task => [task.projectTitle, task.projectHue]), [[summary.title, taskHue(artifact.id)], [summary.title, taskHue(artifact.id)]]);
+assert.deepEqual(projectWidget.tasks.filter(task => task.id !== unassignedTask.id).map(task => [task.projectTitle, task.projectHue]), [[summary.title, taskHue(artifact.id)]]);
+assert.ok(!projectWidget.tasks.some(task => task.id === projectTask.id), 'A project period without scheduled subtasks stays off the daily widget');
 assert.equal(projectWidget.tasks.find(task => task.id === unassignedTask.id).projectTitle, null);
 assert.equal(projectWidget.tasks.find(task => task.id === unassignedTask.id).projectHue, null);
 const childWidget = widgetPlan({ ...projectPlan, tasks: projectPlan.tasks.map(task => task.id === projectTask.id ? { ...task, subtasks: [{ id: 'project-child', taskId: task.id, date: projectDay, title: 'Figure', done: 0 }] } : task) });

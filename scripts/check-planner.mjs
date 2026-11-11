@@ -115,6 +115,12 @@ assert.equal((await readCalendar(db, alice, date)).tasks.length, 0);
 console.log('PASS: owner-only edits, personal month visibility, month boundaries and leap years, completion and moved/deleted tasks, calendar/task separation and saved event order.');
 
 const project = await change(db, alice, { op: 'task.add', date: '2030-01-30', endDate: '2030-02-02', title: 'Write paper' });
+for (const date of ['2030-01-30', '2030-01-31', '2030-02-02']) {
+  const plan = await readDay(db, alice, date);
+  assert.deepEqual(dailyTaskItems(plan.tasks, date), [], 'A period without dated subtasks is not a daily action');
+  assert.equal(widgetPlan(plan).taskCount, 0, 'An empty period does not appear in the Mac widget or completion count');
+}
+assert.ok((await readCalendar(db, alice, '2030-02-01')).tasks.some(task => task.id === project.id), 'The period remains available in the calendar for editing');
 const first = await change(db, alice, { op: 'subtask.add', taskId: project.id, date: '2030-01-31', title: 'Outline' });
 const second = await change(db, alice, { op: 'subtask.add', taskId: project.id, date: '2030-02-01', title: 'Draft' });
 assert.equal((await readDay(db, bob, '2030-01-31')).tasks[0].subtasks.length, 2, 'Others can see progress across days');
@@ -216,6 +222,15 @@ await change(db, alice, { op: 'task.move', id: orderThree.id, targetId: orderOne
 const movedOrder = [orderThree.id, orderOne.id, orderTwo.id];
 assert.deepEqual((await readDay(db, alice, orderedDate)).tasks.map(task => task.id), movedOrder, 'Move inserts the parent at the requested position');
 assert.deepEqual((await readCalendar(db, alice, orderedDate, 'week')).tasks.map(task => task.id), movedOrder, 'Manual order persists in calendar reads');
+await change(db, alice, { op: 'task.move', id: orderThree.id, targetId: orderTwo.id, position: 'before', date: orderedDate });
+assert.deepEqual((await readDay(db, alice, orderedDate)).tasks.map(task => task.id), [orderOne.id, orderThree.id, orderTwo.id], 'Dropping before a lower card uses its upper edge');
+await change(db, alice, { op: 'task.move', id: orderThree.id, targetId: orderTwo.id, position: 'after', date: orderedDate });
+assert.deepEqual((await readDay(db, alice, orderedDate)).tasks.map(task => task.id), expectedOrder, 'Dropping after a lower card uses its lower edge');
+await change(db, alice, { op: 'task.move', id: orderThree.id, targetId: orderOne.id, position: 'after', date: orderedDate });
+assert.deepEqual((await readDay(db, alice, orderedDate)).tasks.map(task => task.id), [orderOne.id, orderThree.id, orderTwo.id], 'Dragging upward can insert after the target');
+await assert.rejects(change(db, alice, { op: 'task.move', id: orderThree.id, targetId: orderOne.id, position: 'invalid', date: orderedDate }), error => error.status === 400);
+await change(db, alice, { op: 'task.move', id: orderThree.id, targetId: orderOne.id, position: 'before', date: orderedDate });
+assert.deepEqual((await readDay(db, alice, orderedDate)).tasks.map(task => task.id), movedOrder, 'Dropping before the first card restores the intended order');
 const orderFour = await change(db, alice, { op: 'task.add', date: orderedDate, title: 'New task at end' });
 assert.deepEqual((await readDay(db, alice, orderedDate)).tasks.map(task => task.id), [...movedOrder, orderFour.id]);
 const secondChild = await change(db, alice, { op: 'subtask.add', taskId: orderThree.id, date: orderedDate, title: 'Second child' });
