@@ -9,6 +9,7 @@ type Props = {
   task: Task; projects: TaskProject[]; date: string; busy: boolean; readOnly: boolean;
   previousTaskId?: string; nextTaskId?: string;
   reorderable?: boolean;
+  initialEditing?: boolean;
   draggedTask: Pick<Task, "id" | "done"> | null;
   onDragStart: () => void; onDragEnd: () => void;
   onChange: (input: Record<string, unknown>, message?: string) => Promise<boolean>;
@@ -17,11 +18,11 @@ type Props = {
 };
 const label = (date: string) => `${Number(date.slice(5, 7))}.${Number(date.slice(8))}`;
 
-export function PlannerTask({ task, projects, date, busy, readOnly, reorderable = true, previousTaskId, nextTaskId, draggedTask, onDragStart, onDragEnd, onChange, onDelete, onOpenWorkLog }: Props) {
+export function PlannerTask({ task, projects, date, busy, readOnly, reorderable = true, initialEditing = false, previousTaskId, nextTaskId, draggedTask, onDragStart, onDragEnd, onChange, onDelete, onOpenWorkLog }: Props) {
   const [menu, setMenu] = useState(false);
   const [dropPosition, setDropPosition] = useState<"before" | "after" | null>(null);
   useEffect(() => setDropPosition(null), [draggedTask?.id]);
-  const [editing, setEditing] = useState(false);
+  const [editing, setEditing] = useState(initialEditing && !readOnly);
   const [title, setTitle] = useState(task.title);
   const [start, setStart] = useState(task.date);
   const [end, setEnd] = useState(task.endDate ?? task.date);

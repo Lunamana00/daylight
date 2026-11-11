@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
-import { CalendarDays, Check, ChevronLeft, ChevronRight, ExternalLink, Square } from "lucide-react";
+import { CalendarDays, Check, ChevronLeft, ChevronRight, ExternalLink, Pencil, Square } from "lucide-react";
 import { ko } from "react-day-picker/locale";
 import { Calendar, CalendarDayButton } from "./ui/calendar";
 import { addDays, calendarProjects, calendarTaskGroups, calendarTaskLanes, calendarWeekLayout, calendarWeekOffsets, milestoneKey, monthRange, taskHue, today, weekRange } from "../lib/planner-core";
@@ -97,9 +97,10 @@ export function PlannerCalendar({ date, data, busy, onSelectDate, onManage, onCh
               style={{ gridColumn: "1 / -1", gridRow: 1 }}
               disabled={busy}
               onClick={() => onOpenTask(task)}
-              title={`${task.title} · ${dateLabel(task.date)} – ${dateLabel(taskEnd)}`}
+              aria-label={`${task.title} 제목·기간 수정`}
+              title={`${task.title} · ${dateLabel(task.date)} – ${dateLabel(taskEnd)} · 수정`}
             >
-              {task.date < from && <span aria-hidden="true">‹</span>}<span className="week-period-title">{task.projectTitle && <small className="calendar-project-label"><i className="project-color-dot" aria-hidden="true" />{task.projectTitle}</small>}<span>{task.title}</span></span>{task.subtasks.length > 0 ? <small>{task.subtasks.filter(child => child.done).length}/{task.subtasks.length}</small> : task.done ? <Check size={12} /> : null}{taskEnd > to && <span aria-hidden="true">›</span>}
+              {task.date < from && <span aria-hidden="true">‹</span>}<span className="week-period-title">{task.projectTitle && <small className="calendar-project-label"><i className="project-color-dot" aria-hidden="true" />{task.projectTitle}</small>}<span>{task.title}</span></span>{task.subtasks.length > 0 ? <small>{task.subtasks.filter(child => child.done).length}/{task.subtasks.length}</small> : task.done ? <Check size={12} /> : null}<Pencil size={12} aria-hidden="true" />{taskEnd > to && <span aria-hidden="true">›</span>}
             </button>
             {week.slice(column - 1, column - 1 + span).map((key, index) => {
               const children = task.subtasks.filter(child => child.date === key);

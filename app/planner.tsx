@@ -154,7 +154,7 @@ export default function Planner({ googleLogin = false }: { googleLogin?: boolean
   function taskRow(task: Task, readOnly = false, managePeriod = false) {
     const ordered = (view === "mine" ? ownFiltered : myTasks).filter(item => item.done === task.done);
     const index = ordered.findIndex(item => item.id === task.id);
-    return <PlannerTask key={`${date}-${task.id}`} task={task} projects={data?.projects ?? []} date={date} busy={busy} readOnly={readOnly} reorderable={!managePeriod} previousTaskId={ordered[index - 1]?.id} nextTaskId={ordered[index + 1]?.id} draggedTask={draggedTask} onDragStart={() => setDraggedTask({ id: task.id, done: task.done })} onDragEnd={() => setDraggedTask(null)} onChange={async (input, message) => {
+    return <PlannerTask key={`${date}-${task.id}`} task={task} projects={data?.projects ?? []} date={date} busy={busy} readOnly={readOnly} reorderable={!managePeriod} initialEditing={managePeriod} previousTaskId={ordered[index - 1]?.id} nextTaskId={ordered[index + 1]?.id} draggedTask={draggedTask} onDragStart={() => setDraggedTask({ id: task.id, done: task.done })} onDragEnd={() => setDraggedTask(null)} onChange={async (input, message) => {
       const saved = await mutate(input, message);
       if (saved && managePeriod && input.op === "task.patch" && typeof input.date === "string") selectDate(input.date);
       return saved;
@@ -223,7 +223,7 @@ export default function Planner({ googleLogin = false }: { googleLogin?: boolean
     </div>
     {toast && <div className="toast" role="status"><Check size={16} />{toast}</div>}
     <dialog ref={dialog} className="app-dialog" onCancel={() => setModal(null)} aria-labelledby="dialog-title" onClick={event => { if (event.target === event.currentTarget) setModal(null); }}><div className="dialog-inner"><div className="dialog-heading"><h2 id="dialog-title">{modal === "connections" ? "나의 프로필과 연결" : modal === "share" ? "사이트 공유" : modal === "task" ? "기간 할 일" : "할 일을 삭제할까요?"}</h2><button className="icon-button" aria-label="닫기" onClick={() => setModal(null)}><X size={19} /></button></div>
-      {modal === "task" && inspectedTask && <ul className="task-list period-task-editor">{taskRow(inspectedTask, false, true)}</ul>}
+      {modal === "task" && inspectedTask && <>{error && <p className="error-banner" role="alert">{error}</p>}<ul className="task-list period-task-editor">{taskRow(inspectedTask, false, true)}</ul></>}
       {modal === "connections" && <><form className="profile-form" onSubmit={async event => { event.preventDefault(); await mutate({ op: "profile.save", name: nameDraft }, "이름을 저장했어요."); }}><label htmlFor="profile-name">다른 사람에게 보이는 이름</label><div><input id="profile-name" value={nameDraft} onChange={event => setNameDraft(event.target.value)} maxLength={40} required /><button className="button secondary compact" disabled={busy}>저장</button></div></form>
         {googleLogin ? <><form method="post" action="/auth/google/calendar">
           <button className="button primary full" type="submit" disabled={busy}>
