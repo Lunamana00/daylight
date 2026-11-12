@@ -48,8 +48,10 @@ export function PlannerTask({ task, projects, date, busy, readOnly, reorderable 
     if (await onChange({ op: childDate ? "subtask.add" : "backlog.add", taskId: task.id, title: childTitle, date: childDate || undefined })) { setChildTitle(""); setAddingChild(false); }
   }}>
     <input autoFocus value={childTitle} onChange={event => setChildTitle(event.target.value)} placeholder="하위 할 일" aria-label={`${task.title} 하위 할 일 추가`} maxLength={240} required disabled={busy} />
-    <label className="subtask-date-picker">날짜 (선택)<input type="date" value={childDate} min={task.date} max={task.endDate ?? task.date} onChange={event => setChildDate(event.target.value)} aria-label="하위 할 일 날짜, 비우면 날짜 미정" disabled={busy} /></label>
-    <button className="text-button" disabled={busy || !childTitle.trim()}>추가</button><button type="button" className="icon-button" aria-label="하위 할 일 추가 닫기" disabled={busy} onClick={() => setAddingChild(false)}><X size={12} /></button>
+    <div className="subtask-add-footer"><div className="subtask-schedule-controls">
+      <select aria-label="하위 할 일 일정" value={childDate ? "scheduled" : "unscheduled"} disabled={busy} onChange={event => setChildDate(event.target.value === "unscheduled" ? "" : date < task.date ? task.date : date > (task.endDate ?? task.date) ? (task.endDate ?? task.date) : date)}><option value="unscheduled">날짜 미정</option><option value="scheduled">날짜 지정</option></select>
+      {childDate && <input type="date" value={childDate} min={task.date} max={task.endDate ?? task.date} required onChange={event => setChildDate(event.target.value)} aria-label="하위 할 일 날짜" disabled={busy} />}
+    </div><div className="subtask-add-actions"><button className="text-button" disabled={busy || !childTitle.trim()}>추가</button><button type="button" className="icon-button" aria-label="하위 할 일 추가 닫기" disabled={busy} onClick={() => setAddingChild(false)}><X size={12} /></button></div></div>
   </form> : <button className="text-button subtask-add-toggle" disabled={busy} onClick={() => { setChildDate(""); setAddingChild(true); }}>＋ 하위 할 일</button>);
 
   return <li className={`task-item task-color ${task.projectId ? "" : "task-unassigned"} ${children.length || task.endDate ? "task-family" : ""} ${dragging ? "task-drag-source" : ""} ${canDrop && dropPosition ? `task-drop-${dropPosition}` : ""}`} style={{ "--task-hue": taskHue(task) } as CSSProperties}

@@ -72,6 +72,26 @@ for (const test of [
 }
 console.log('Task shortcut checks passed: Command Enter, newlines, Korean composition, held keys, and submission guards.');
 
+const taskSource = ts.createSourceFile('planner-task.tsx', readFileSync(new URL('../components/planner-task.tsx', import.meta.url), 'utf8'), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+let scheduleChange;
+function findScheduleControl(node) {
+  if (ts.isJsxOpeningElement(node) && node.tagName.getText(taskSource) === 'select' && node.attributes.properties.some(attr => ts.isJsxAttribute(attr) && attr.name.getText(taskSource) === 'aria-label' && attr.initializer?.text === '하위 할 일 일정')) {
+    scheduleChange = node.attributes.properties.find(attr => ts.isJsxAttribute(attr) && attr.name.getText(taskSource) === 'onChange')?.initializer?.expression?.getText(taskSource);
+  }
+  ts.forEachChild(node, findScheduleControl);
+}
+findScheduleControl(taskSource);
+assert.ok(scheduleChange, 'Long-task subtasks have an explicit undated option');
+const selectSchedule = new Function('setChildDate', 'task', 'date', `return (${scheduleChange});`);
+for (const [value, currentDate, expected] of [
+  ['unscheduled', '2026-11-12', ''], ['scheduled', '2026-11-12', '2026-11-12'],
+  ['scheduled', '2026-11-01', task.date], ['scheduled', '2026-12-01', task.endDate],
+]) {
+  let selectedDate;
+  selectSchedule(value => { selectedDate = value; }, task, currentDate)({ target: { value } });
+  assert.equal(selectedDate, expected, 'Scheduling is optional and stays inside the parent period');
+}
+
 const grouped = render({ grouped: true });
 assert.doesNotMatch(grouped, /aria-label="강화학습 논문 발표 완료"/, 'Long work is a group, not a daily completion checkbox');
 assert.match(grouped, /task-title-edit/);
@@ -82,6 +102,10 @@ const children = [
   { id: 'later-child', taskId: task.id, title: '다른 날짜의 하위 할 일', date: '2026-11-12', done: 0, sortOrder: 1 },
 ];
 const parent = { ...task, subtasks: children, projectTitle: '연구 프로젝트', projectId: 'project' };
+const undatedChild = { id: 'undated-child', title: '날짜 미정 세부 작업', taskId: task.id, taskTitle: task.title, taskDate: task.date, taskEndDate: task.endDate, projectId: null, projectTitle: null, projectHue: null };
+const parentWithUndated = render({ task: { ...task, unscheduledCount: 1 }, grouped: true, backlog: [undatedChild], onDeleteBacklog() {} });
+assert.match(parentWithUndated, /날짜 미정 세부 작업/, 'An undated detail stays visible under its long-task parent');
+assert.match(parentWithUndated, /aria-label="날짜 미정 세부 작업 날짜 지정"/);
 assert.match(render({ task: parent, grouped: true }), /<details class="subtasks"[\s\S]*＋ 하위 할 일<\/button><\/details>/, 'The add control stays inside a non-empty collapsible list');
 const childRow = renderToStaticMarkup(createElement(PlannerDailySubtask, { ...props, task: parent, child: children[0], onOpenTask() {} }));
 assert.match(childRow, /오늘의 하위 할 일/);
