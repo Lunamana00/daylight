@@ -131,15 +131,17 @@ export function PlannerTask({ task, projects, date, busy, readOnly, reorderable 
         <button className={`task-check ${child.done ? "checked" : ""}`} disabled={busy || readOnly} onClick={() => void onChange({ op: "subtask.patch", id: child.id, done: !child.done })} aria-label={`${child.title} ${child.done ? "완료 취소" : "완료"}`}>
           {child.done ? <Check size={12} strokeWidth={3} /> : null}
         </button>
-        {editChild?.id === child.id ? <form className="subtask-form" onSubmit={async event => {
+        {editChild?.id === child.id ? <form className="subtask-form subtask-edit" onSubmit={async event => {
           event.preventDefault();
           if (await onChange({ op: "subtask.patch", id: child.id, title: editChild.title, date: editChild.date })) setEditChild(null);
         }}>
           <input value={editChild.title} onChange={event => setEditChild({ ...editChild, title: event.target.value })} maxLength={240} required aria-label="하위 할 일 제목" />
-          <input type="date" value={editChild.date} min={task.date} max={task.endDate ?? task.date} required onChange={event => setEditChild({ ...editChild, date: event.target.value })} aria-label="하위 할 일 날짜" />
-          <button className="text-button" disabled={busy}>저장</button><button type="button" className="icon-button" aria-label="수정 취소" onClick={() => setEditChild(null)}><X size={13} /></button>
+          <div className="subtask-add-footer"><div className="subtask-schedule-controls">
+            <select aria-label="기존 하위 할 일 일정" value={editChild.date ? "scheduled" : "unscheduled"} disabled={busy} onChange={event => setEditChild({ ...editChild, date: event.target.value === "unscheduled" ? null : date < task.date ? task.date : date > (task.endDate ?? task.date) ? (task.endDate ?? task.date) : date })}><option value="unscheduled">날짜 미정</option><option value="scheduled">날짜 지정</option></select>
+            {editChild.date && <input type="date" value={editChild.date} min={task.date} max={task.endDate ?? task.date} required disabled={busy} onChange={event => setEditChild({ ...editChild, date: event.target.value || null })} aria-label="하위 할 일 날짜" />}
+          </div><div className="subtask-add-actions"><button className="text-button" disabled={busy}>저장</button><button type="button" className="icon-button" aria-label="수정 취소" disabled={busy} onClick={() => setEditChild(null)}><X size={13} /></button></div></div>
         </form> : <>
-          <span className={`subtask-title ${child.done ? "subtask-done" : ""}`}>{child.title}</span><time dateTime={child.date}>{label(child.date)}</time>
+          <span className={`subtask-title ${child.done ? "subtask-done" : ""}`}>{child.title}</span>{readOnly ? child.date && <time dateTime={child.date}>{label(child.date)}</time> : <button className="text-button subtask-date-button" disabled={busy} aria-label={`${child.title} 날짜 변경`} onClick={() => setEditChild({ ...child })}>{child.date ? <time dateTime={child.date}>{label(child.date)}</time> : "날짜 미정"}</button>}
           {!readOnly && <span className="subtask-order-actions">
             <button className="icon-button" aria-label={`${child.title} 위로 이동`} title="위로 이동" disabled={busy || !children[index - 1] || children[index - 1].done !== child.done} onClick={() => void onChange({ op: "subtask.move", id: child.id, targetId: children[index - 1].id, date }, "순서를 변경했어요.")}><ArrowUp size={12} /></button>
             <button className="icon-button" aria-label={`${child.title} 아래로 이동`} title="아래로 이동" disabled={busy || !children[index + 1] || children[index + 1].done !== child.done} onClick={() => void onChange({ op: "subtask.move", id: child.id, targetId: children[index + 1].id, date }, "순서를 변경했어요.")}><ArrowDown size={12} /></button>

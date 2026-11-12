@@ -10,7 +10,7 @@ export type WorkEntry = {
   sourceKey: string; sourceUrl: string | null; occurredAt: string; featured: number;
   taskTitle: string | null; subtaskTitle: string | null; stageTitle: string | null; files: WorkFile[];
 };
-export type WorkTask = { id: string; title: string; date: string; endDate: string | null; done: number; stageId: string | null; unscheduledCount?: number; subtasks: Array<{ id: string; title: string; date: string; done: number }> };
+export type WorkTask = { id: string; title: string; date: string; endDate: string | null; done: number; stageId: string | null; unscheduledCount?: number; subtasks: Array<{ id: string; title: string; date: string | null; done: number }> };
 export type WorkConnection = { id: string; artifactId: string; provider: "codex" | "chatgpt"; scope: string; expiresAt: string; lastSyncAt: string | null; revokedAt: string | null };
 export type WorkGithubConnection = { repository: string; branch: string; connectedAt: string };
 export type WorkGithubVersion = { id: string; entryId: string; repository: string; commitSha: string; path: string; digest: string; savedAt: string };

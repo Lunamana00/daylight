@@ -1,0 +1,1 @@
+ALTER TABLE `task_subtasks` ADD `scheduled` integer DEFAULT 1 NOT NULL;

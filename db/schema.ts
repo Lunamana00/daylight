@@ -23,6 +23,7 @@ export const taskSubtasks = sqliteTable("task_subtasks", {
   id: text("id").primaryKey(),
   taskId: text("task_id").notNull().references(() => tasks.id, { onDelete: "cascade" }),
   date: text("date").notNull(),
+  scheduled: integer("scheduled").notNull().default(1),
   title: text("title").notNull(),
   done: integer("done").notNull().default(0),
   sortOrder: integer("sort_order").notNull().default(0),

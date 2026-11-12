@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { CalendarDays, Pencil, Trash2, X } from "lucide-react";
+import { CalendarDays, Check, Pencil, Trash2, X } from "lucide-react";
 import { today, type BacklogItem } from "../lib/planner-core";
 
 type Props = {
@@ -27,7 +27,8 @@ function BacklogRow({ item, date, busy, showParent = true, onChange, onDelete }:
       {editing === "title" ? <input autoFocus aria-label="날짜 미정 할 일 제목" value={title} maxLength={240} required disabled={busy} onChange={event => setTitle(event.target.value)} /> : <label>할 날짜<input autoFocus aria-label={`${item.title} 할 날짜`} type="date" min={item.taskDate ?? "2000-01-01"} max={item.taskEndDate ?? "2100-09-01"} value={scheduledDate} required disabled={busy} onChange={event => setScheduledDate(event.target.value)} /></label>}
       <button className="text-button" disabled={busy}>{editing === "date" ? "날짜 지정" : "저장"}</button><button className="icon-button" type="button" disabled={busy} aria-label="취소" onClick={() => setEditing(null)}><X size={13} /></button>
     </form> : <>
-      <div className="backlog-content">{showParent && item.projectTitle && <small>{item.projectTitle}</small>}<span>{item.title}</span>{showParent && item.taskTitle && <small>{item.taskTitle}</small>}</div>
+      {Boolean(item.subtask) && <button className={`task-check ${item.done ? "checked" : ""}`} disabled={busy} aria-label={`${item.title} ${item.done ? "완료 취소" : "완료"}`} onClick={() => void onChange({ op: "subtask.patch", id: item.id, done: !item.done })}>{item.done ? <Check size={13} /> : null}</button>}
+      <div className="backlog-content">{showParent && item.projectTitle && <small>{item.projectTitle}</small>}<span className={item.done ? "subtask-done" : ""}>{item.title}</span>{showParent && item.taskTitle && <small>{item.taskTitle}</small>}</div>
       <div className="backlog-actions"><button className="text-button" disabled={busy || !canScheduleToday} title={canScheduleToday ? "오늘 할 일로 옮기기" : "상위 작업의 기간 밖이에요. 날짜 지정에서 선택해 주세요."} onClick={() => void onChange({ op: "backlog.schedule", id: item.id, date: currentDay }, "오늘 할 일에 추가했어요.")}>오늘</button>
         <button className="icon-button" aria-label={`${item.title} 날짜 지정`} title="날짜 지정" disabled={busy} onClick={() => setEditing("date")}><CalendarDays size={14} /></button>
         <button className="icon-button" aria-label={`${item.title} 수정`} disabled={busy} onClick={() => { setTitle(item.title); setEditing("title"); }}><Pencil size={13} /></button>
