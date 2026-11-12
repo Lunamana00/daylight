@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
-import { Check, Download, ExternalLink, FileText, FolderOpen, GitBranch, Paperclip, Plus, RefreshCw, Star, X } from "lucide-react";
+import { Check, Download, ExternalLink, FileText, FolderOpen, GitBranch, Paperclip, Plus, RefreshCw, Star, Trash2, X } from "lucide-react";
 import type { Task } from "../lib/planner-core";
 import { projectColors, taskHue } from "../lib/planner-core";
 import { workGithubUrl, workKinds, workProviders, workSummaryFields } from "../lib/work-log-types";
@@ -63,19 +63,22 @@ export function WorkLog({ task, onClearTask, onOpenTask }: { task: Task | null; 
         {catalog.artifacts.map(item => <button key={item.id} className={`task-color ${selected === item.id ? "selected" : ""}`} style={{ "--task-hue": item.colorHue ?? taskHue(item.id) } as CSSProperties} aria-pressed={selected === item.id} onClick={() => setSelected(item.id)}><FolderOpen size={16} /><span>{item.title}<small>기록 {item.entryCount} · 할 일 {item.taskCount}</small></span></button>)}
         <button className={selected === "" ? "selected" : ""} aria-pressed={selected === ""} onClick={() => setSelected("")}><span>연결 대기<small>{catalog.pending}개</small></span></button>
       </nav>
-      {selected !== null ? <WorkDetailView key={selected} artifact={artifact} artifacts={catalog.artifacts} task={task?.projectId === selected ? null : task} onClearTask={onClearTask} onOpenTask={onOpenTask} onSaved={load} uploadsAvailable={catalog.uploadsAvailable} /> : <p className="muted work-empty">프로젝트를 추가해 주세요.</p>}
+      {selected !== null ? <WorkDetailView key={selected} artifact={artifact} artifacts={catalog.artifacts} task={task?.projectId === selected ? null : task} onClearTask={onClearTask} onOpenTask={onOpenTask} onSaved={load} onDeleted={async () => { setSelected(""); onClearTask(); await load(); }} uploadsAvailable={catalog.uploadsAvailable} /> : <p className="muted work-empty">프로젝트를 추가해 주세요.</p>}
     </div> : !error && <p className="muted" role="status">작업물 불러오는 중…</p>}
   </section>;
 }
 
-function WorkDetailView({ artifact, artifacts, task, onClearTask, onOpenTask, onSaved, uploadsAvailable }: {
+function WorkDetailView({ artifact, artifacts, task, onClearTask, onOpenTask, onSaved, onDeleted, uploadsAvailable }: {
   artifact: WorkArtifact | null; artifacts: WorkArtifact[]; task: Task | null; onClearTask: () => void;
-  onOpenTask: (date: string) => void; onSaved: () => Promise<void>; uploadsAvailable: boolean;
+  onOpenTask: (date: string) => void; onSaved: () => Promise<void>; onDeleted: () => Promise<void>; uploadsAvailable: boolean;
 }) {
   const [detail, setDetail] = useState<WorkDetail | null>(null);
   const [stage, setStage] = useState("");
   const [view, setView] = useState("flow");
   const [adding, setAdding] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const deleteDialog = useRef<HTMLDialogElement>(null);
+  useEffect(() => { if (deleting) deleteDialog.current?.showModal(); else deleteDialog.current?.close(); }, [deleting]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [github, setGithub] = useState<WorkGithubState>({ connection: null, versions: [] });
@@ -118,7 +121,14 @@ function WorkDetailView({ artifact, artifacts, task, onClearTask, onOpenTask, on
     </> : !error && <p role="status" className="muted">{materials ? "자료 불러오는 중…" : "기록 불러오는 중…"}</p>}
   </>;
   return <div className="work-detail" aria-busy={busy}>
-    <header className="work-heading"><div><h2>{artifact?.title ?? "연결 대기"}</h2>{artifact?.description && <p className="work-goal">{artifact.description}</p>}{artifact?.url && <a href={artifact.url} target="_blank" rel="noreferrer" className="text-button">대표 결과물<ExternalLink size={12} /></a>}</div><button className="icon-button" disabled={busy} aria-label="기록 새로고침" onClick={() => void run(async () => {})}><RefreshCw size={15} /></button></header>
+    <header className="work-heading"><div><h2>{artifact?.title ?? "연결 대기"}</h2>{artifact?.description && <p className="work-goal">{artifact.description}</p>}{artifact?.url && <a href={artifact.url} target="_blank" rel="noreferrer" className="text-button">대표 결과물<ExternalLink size={12} /></a>}</div><div className="work-actions"><button className="icon-button" disabled={busy} aria-label="기록 새로고침" onClick={() => void run(async () => {})}><RefreshCw size={15} /></button>{artifact && <button className="icon-button" disabled={busy} aria-label="프로젝트 삭제" title="프로젝트 삭제" onClick={() => { setError(""); setDeleting(true); }}><Trash2 size={15} /></button>}</div></header>
+    <dialog ref={deleteDialog} className="app-dialog" aria-labelledby="project-delete-title" onCancel={event => { if (busy) event.preventDefault(); else setDeleting(false); }}><div className="dialog-inner"><div className="dialog-heading"><h2 id="project-delete-title">프로젝트를 삭제할까요?</h2></div><p className="dialog-description">‘{artifact?.title}’의 프로젝트 정보와 진행 단계, 연결 설정을 삭제합니다. 할 일은 그대로 남고, 기록과 첨부 자료는 ‘연결 대기’로 이동합니다. GitHub에 저장한 자료는 유지됩니다.</p>{error && <p className="error-banner" role="alert">{error}</p>}<div className="dialog-buttons"><button className="button secondary" disabled={busy} onClick={() => setDeleting(false)}>취소</button><button className="button danger" disabled={busy || !artifact} onClick={async () => {
+      if (busy || !artifact) return;
+      setBusy(true); setError("");
+      try { await api("", { op: "artifact.delete", id: artifact.id }); setDeleting(false); await onDeleted(); }
+      catch (error) { setError(error instanceof Error ? error.message : "프로젝트를 삭제하지 못했어요."); }
+      finally { setBusy(false); }
+    }}>프로젝트 삭제</button></div></div></dialog>
     {artifact && <div role="group" aria-label="프로젝트 색상" className="mb-5 flex flex-wrap items-center gap-2">
       <span className="tiny muted">색상</span>
       {projectColors.map(color => <button key={color.hue} type="button" className="icon-button" disabled={busy} aria-label={`${color.name} 색상`} aria-pressed={artifact.colorHue === color.hue} title={color.name}

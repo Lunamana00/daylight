@@ -3,9 +3,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ArrowRight, CalendarDays, Check, ChevronLeft, ChevronRight, Copy, ExternalLink, FolderOpen, LoaderCircle, LockKeyhole, RefreshCw, Settings2, Share2, Sun, Sunrise, Users, X } from "lucide-react";
 import { addDays, dailyTaskItems, today } from "../lib/planner-core";
-import type { DayData, Subtask, Task } from "../lib/planner-core";
+import type { BacklogItem, DayData, Subtask, Task } from "../lib/planner-core";
 import { PlannerCalendar } from "../components/planner-calendar";
 import { PlannerDailySubtask, PlannerTask } from "../components/planner-task";
+import { PlannerBacklog } from "../components/planner-backlog";
 import { WorkLog } from "../components/work-log";
 
 type View = "mine" | "together" | "work";
@@ -24,13 +25,17 @@ export default function Planner({ googleLogin = false }: { googleLogin?: boolean
   const [data, setData] = useState<DayData | null>(null);
   const [view, setView] = useState<View>("mine");
   const [taskLayout, setTaskLayout] = useState<"split" | "list">("split");
-  const [taskScope, setTaskScope] = useState<"day" | "all">("day");
+  const [taskScope, setTaskScope] = useState<"day" | "all" | "unscheduled">("day");
+  const [workScope, setWorkScope] = useState<"active" | "unscheduled">("active");
+  const [backlog, setBacklog] = useState<BacklogItem[]>([]);
+  const [deleteBacklog, setDeleteBacklog] = useState<BacklogItem | null>(null);
   const [catalog, setCatalog] = useState<Task[] | null>(null);
   const [catalogError, setCatalogError] = useState("");
   const [workTask, setWorkTask] = useState<Task | null>(null);
   const [filter, setFilter] = useState("all");
   const [person, setPerson] = useState("all");
   const [draft, setDraft] = useState("");
+  const [draftUnscheduled, setDraftUnscheduled] = useState(false);
   const [draftProject, setDraftProject] = useState("");
   const [periodStart, setPeriodStart] = useState(date);
   const [periodEnd, setPeriodEnd] = useState(date);
@@ -88,9 +93,9 @@ export default function Planner({ googleLogin = false }: { googleLogin?: boolean
     void (async () => {
       try {
         const response = await fetch("/api/planner?view=tasks", { cache: "no-store" });
-        const value = await response.json() as { tasks: Task[]; error?: string };
+        const value = await response.json() as { tasks: Task[]; backlog: BacklogItem[]; error?: string };
         if (!response.ok) throw new Error(value.error || "전체 작업을 불러오지 못했어요.");
-        if (active) setCatalog(value.tasks);
+        if (active) { setCatalog(value.tasks); setBacklog(value.backlog); }
       } catch (err) { if (active) setCatalogError(err instanceof Error ? err.message : "전체 작업을 불러오지 못했어요."); }
     })();
     return () => { active = false; };
@@ -168,7 +173,7 @@ export default function Planner({ googleLogin = false }: { googleLogin?: boolean
   }
   const myTasks = data?.tasks.filter(task => task.ownerId === data.me.id && dailyTaskItems([task], date).length > 0) || [];
   const ownCatalog = catalog?.filter(task => task.ownerId === data?.me.id) ?? [];
-  const groupTasks = ownCatalog.filter(task => task.subtasks.length > 0 || (task.endDate && task.endDate > task.date));
+  const groupTasks = ownCatalog.filter(task => task.subtasks.length > 0 || task.unscheduledCount || (task.endDate && task.endDate > task.date));
   const inspectedTask = data?.tasks.find(task => task.id === calendarTask?.id) ?? ownCatalog.find(task => task.id === calendarTask?.id) ?? calendarTask;
   const dailyItems = dailyTaskItems(myTasks, date);
   const completed = dailyItems.filter(task => task.done).length;
@@ -186,13 +191,14 @@ export default function Planner({ googleLogin = false }: { googleLogin?: boolean
     setCalendarTask(task); setCalendarChildId(childId); setModal("task");
   }
   function removeTask(parent: Task, child?: Subtask) {
-    setDeleteTask(parent); setDeleteChild(child ?? null); setModal("delete");
+    setDeleteTask(parent); setDeleteChild(child ?? null); setDeleteBacklog(null); setModal("delete");
   }
+  function removeBacklog(item: BacklogItem) { setDeleteBacklog(item); setDeleteTask(null); setDeleteChild(null); setModal("delete"); }
   function taskRow(task: Task, { readOnly = false, managePeriod = false, grouped = false, order = myTasks }: { readOnly?: boolean; managePeriod?: boolean; grouped?: boolean; order?: Task[] } = {}) {
     const rowDate = date >= task.date && date <= (task.endDate ?? task.date) ? date : task.date;
     const ordered = order.filter(item => item.done === task.done && item.date <= rowDate && (item.endDate ?? item.date) >= rowDate);
     const index = ordered.findIndex(item => item.id === task.id);
-    return <PlannerTask key={`${rowDate}-${task.id}`} task={task} projects={data?.projects ?? []} date={rowDate} busy={busy} readOnly={readOnly} grouped={grouped} showDate={grouped || order === ownCatalog} reorderable={!managePeriod} initialEditing={managePeriod && !calendarChildId} initialChildId={managePeriod ? calendarChildId : undefined} previousTaskId={ordered[index - 1]?.id} nextTaskId={ordered[index + 1]?.id} draggedTask={draggedTask} onDragStart={() => setDraggedTask({ id: task.id, done: task.done, date: task.date, endDate: task.endDate })} onDragEnd={() => setDraggedTask(null)} onChange={async (input, message) => {
+    return <PlannerTask key={`${rowDate}-${task.id}`} task={task} projects={data?.projects ?? []} date={rowDate} busy={busy} readOnly={readOnly} grouped={grouped} backlog={readOnly ? [] : backlog.filter(item => item.taskId === task.id)} onDeleteBacklog={removeBacklog} showDate={grouped || order === ownCatalog} reorderable={!managePeriod} initialEditing={managePeriod && !calendarChildId} initialChildId={managePeriod ? calendarChildId : undefined} previousTaskId={ordered[index - 1]?.id} nextTaskId={ordered[index + 1]?.id} draggedTask={draggedTask} onDragStart={() => setDraggedTask({ id: task.id, done: task.done, date: task.date, endDate: task.endDate })} onDragEnd={() => setDraggedTask(null)} onChange={async (input, message) => {
       const saved = await mutate(input, message);
       if (saved && managePeriod && input.op === "task.patch" && typeof input.date === "string") selectDate(input.date);
       return saved;
@@ -201,7 +207,7 @@ export default function Planner({ googleLogin = false }: { googleLogin?: boolean
 
   function catalogRows(tasks: Task[], empty: string) {
     const active = tasks.filter(task => !task.done), finished = tasks.filter(task => task.done);
-    const row = (task: Task) => taskRow(task, { order: tasks, grouped: Boolean(task.endDate && task.endDate > task.date) || task.subtasks.length > 0 });
+    const row = (task: Task) => taskRow(task, { order: tasks, grouped: Boolean(task.endDate && task.endDate > task.date) || task.subtasks.length > 0 || Boolean(task.unscheduledCount) });
     return <>{catalogError && <p className="error-banner" role="alert">{catalogError}<button onClick={() => void load(date, true)}>다시 시도</button></p>}
       {catalog === null ? <p className="empty-tasks" role="status">{catalogError ? "작업을 불러오지 못했어요." : "작업 불러오는 중…"}</p> : <>
         {active.length ? <ul className="task-list task-work-list">{active.map(row)}</ul> : <p className="empty-tasks">{empty}</p>}
@@ -212,11 +218,16 @@ export default function Planner({ googleLogin = false }: { googleLogin?: boolean
   const dailyPanel = <section className="task-day-pane" aria-label={`${shortDate(date)} 할 일`}>
     <div className="task-pane-heading"><h3>{date === today() ? "오늘 할 일" : `${shortDate(date)} 할 일`}</h3><span><strong>{completed}</strong> / {dailyItems.length} 완료</span></div>
     <div className="task-progress"><span style={{ width: `${dailyItems.length ? completed / dailyItems.length * 100 : 0}%` }} /></div>
-    <div className="task-filter" aria-label="할 일 필터">{[["all", "전체"], ["open", "할 일"], ["done", "완료"]].map(([key, label]) => <button key={key} className={filter === key ? "selected" : ""} onClick={() => setFilter(key)}>{label}{key === "done" && <span>{completed}</span>}</button>)}</div>
+    <div className="task-filter" aria-label="할 일 필터">{[["all", "전체"], ["open", "미완료"], ["done", "완료"]].map(([key, label]) => <button key={key} className={filter === key ? "selected" : ""} onClick={() => setFilter(key)}>{label}{key === "done" && <span>{completed}</span>}</button>)}</div>
     {dailyRows.length ? <ul className="task-list task-day-list">{dailyRows.map(({ task, item }) => item.subtask
       ? <PlannerDailySubtask key={item.id} task={task} child={task.subtasks.find(child => child.id === item.id)!} date={date} busy={busy} onChange={mutate} onOpenTask={openTask} onDelete={removeTask} />
       : taskRow(task, { order: myTasks.filter(item => !item.subtasks.length) }))}</ul>
       : <p className="empty-tasks">{myTasks.length ? filter === "done" ? "완료한 할 일 없음" : "남은 할 일 없음" : "오늘 할 일 없음"}</p>}
+  </section>;
+  const backlogPanel = <section className="task-backlog-pane" aria-label="날짜 미정 할 일">
+    <div className="task-pane-heading"><h3>날짜 미정 <span className="muted">{backlog.length}</span></h3><button className="text-button" disabled={busy} onClick={() => { setDraftUnscheduled(true); taskInput.current?.focus(); taskInput.current?.scrollIntoView({ block: "nearest", behavior: "smooth" }); }}>＋ 할 일</button></div>
+    {catalogError && <p className="error-banner" role="alert">{catalogError}<button onClick={() => void load(date, true)}>다시 시도</button></p>}
+    {catalog === null ? <p className="empty-tasks" role="status">불러오는 중…</p> : backlog.length ? <PlannerBacklog items={backlog} date={date} busy={busy} onChange={mutate} onDelete={removeBacklog} /> : <p className="empty-tasks">날짜를 정하지 않은 할 일을 여기에 모아두세요.</p>}
   </section>;
   const composer = <form className="task-composer" onKeyDown={event => {
                 if (event.key !== "Enter" || !event.metaKey || event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229) return;
@@ -225,18 +236,18 @@ export default function Planner({ googleLogin = false }: { googleLogin?: boolean
               }} onSubmit={async event => {
                 event.preventDefault();
                 if (busy || !draft.trim()) return;
-                if (await mutate({ op: "task.add", date: periodStart, endDate: periodEnd === periodStart ? null : periodEnd, title: draft, projectId: draftProject || null }, periodEnd > periodStart ? "기간을 달력에 추가했어요." : undefined)) {
+                if (await mutate({ op: draftUnscheduled ? "backlog.add" : "task.add", date: periodStart, endDate: periodEnd === periodStart ? null : periodEnd, title: draft, projectId: draftProject || null }, draftUnscheduled ? "날짜 미정에 보관했어요." : periodEnd > periodStart ? "기간을 달력에 추가했어요." : undefined)) {
                   setDraft("");
                   setFilter("all");
-                  selectDate(periodStart);
+                  if (draftUnscheduled) { setWorkScope("unscheduled"); setTaskScope("unscheduled"); } else selectDate(periodStart);
                   taskInput.current?.focus();
                 }
               }}>
                 <textarea ref={taskInput} value={draft} onChange={event => setDraft(event.target.value)} rows={2} maxLength={240} placeholder="새 할 일" aria-label="새 할 일" disabled={busy} />
-                <div className="task-composer-footer"><div className="task-period-fields">
+                <div className="task-composer-footer"><label className="task-date-unscheduled"><input type="checkbox" checked={draftUnscheduled} disabled={busy} onChange={event => setDraftUnscheduled(event.target.checked)} />날짜 미정</label>{!draftUnscheduled && <div className="task-period-fields">
                   <label>시작일<input type="date" value={periodStart} min="2000-01-01" max="2100-09-01" required disabled={busy} onChange={event => { const value = event.target.value; setPeriodStart(value); setPeriodEnd(end => end < value ? value : end); }} /></label>
                   <span>—</span><label>종료일<input type="date" value={periodEnd} min={periodStart} max="2100-09-01" required disabled={busy} onChange={event => setPeriodEnd(event.target.value)} /></label>
-                </div><label className="task-composer-project">프로젝트<select value={draftProject} disabled={busy} onChange={event => setDraftProject(event.target.value)}><option value="">미지정</option>{data?.projects?.map(project => <option key={project.id} value={project.id}>{project.title}</option>)}</select></label><button aria-label="할 일 추가" aria-keyshortcuts="Meta+Enter" title="할 일 추가 (⌘ Enter)" disabled={busy || !draft.trim()}>추가</button></div>
+                </div>}<label className="task-composer-project">프로젝트<select value={draftProject} disabled={busy} onChange={event => setDraftProject(event.target.value)}><option value="">미지정</option>{data?.projects?.map(project => <option key={project.id} value={project.id}>{project.title}</option>)}</select></label><button aria-label="할 일 추가" aria-keyshortcuts="Meta+Enter" title="할 일 추가 (⌘ Enter)" disabled={busy || !draft.trim()}>추가</button></div>
               </form>;
 
   return <div className="app-shell">
@@ -267,8 +278,8 @@ export default function Planner({ googleLogin = false }: { googleLogin?: boolean
                 setTaskLayout(value);
                 try { localStorage.setItem("daylight.task-layout.v1", value); } catch { /* Keep the current choice in memory. */ }
               }}><option value="split">작업·오늘 분할형</option><option value="list">목록 전환형</option></select></label></div>
-              {taskLayout === "list" && <div className="task-scope-switch" role="group" aria-label="작업 표시 범위"><button className={taskScope === "day" ? "selected" : ""} aria-pressed={taskScope === "day"} disabled={busy || Boolean(draggedTask)} onClick={() => setTaskScope("day")}>{date === today() ? "오늘" : "선택한 날"}</button><button className={taskScope === "all" ? "selected" : ""} aria-pressed={taskScope === "all"} disabled={busy || Boolean(draggedTask)} onClick={() => setTaskScope("all")}>전체 작업</button></div>}
-              {taskLayout === "split" ? <div className="task-split-panes"><section className="task-group-pane" aria-label="진행 중인 일"><div className="task-pane-heading"><h3>진행 중인 일</h3><span>{groupTasks.filter(task => !task.done).length}</span></div>{catalogRows(groupTasks, "진행 중인 일이 없어요.")}</section>{dailyPanel}</div> : taskScope === "day" ? dailyPanel : <section className="task-all-pane" aria-label="전체 작업">{catalogRows(ownCatalog, "아직 등록한 작업이 없어요.")}</section>}
+              {taskLayout === "list" && <div className="task-scope-switch" role="group" aria-label="작업 표시 범위"><button className={taskScope === "day" ? "selected" : ""} aria-pressed={taskScope === "day"} disabled={busy || Boolean(draggedTask)} onClick={() => setTaskScope("day")}>{date === today() ? "오늘" : "선택한 날"}</button><button className={taskScope === "all" ? "selected" : ""} aria-pressed={taskScope === "all"} disabled={busy || Boolean(draggedTask)} onClick={() => setTaskScope("all")}>전체 작업</button><button className={taskScope === "unscheduled" ? "selected" : ""} aria-pressed={taskScope === "unscheduled"} disabled={busy || Boolean(draggedTask)} onClick={() => setTaskScope("unscheduled")}>날짜 미정 {backlog.length}</button></div>}
+              {taskLayout === "split" ? <div className="task-split-panes"><section className="task-group-pane" aria-label="작업 관리"><div className="task-scope-switch task-work-scope" role="group" aria-label="작업 목록"><button className={workScope === "active" ? "selected" : ""} aria-pressed={workScope === "active"} disabled={busy || Boolean(draggedTask)} onClick={() => setWorkScope("active")}>진행 중인 일</button><button className={workScope === "unscheduled" ? "selected" : ""} aria-pressed={workScope === "unscheduled"} disabled={busy || Boolean(draggedTask)} onClick={() => setWorkScope("unscheduled")}>날짜 미정 {backlog.length}</button></div>{workScope === "unscheduled" ? backlogPanel : catalogRows(groupTasks, "진행 중인 일이 없어요.")}</section>{dailyPanel}</div> : taskScope === "day" ? dailyPanel : taskScope === "unscheduled" ? backlogPanel : <section className="task-all-pane" aria-label="전체 작업">{catalogRows(ownCatalog, "아직 등록한 작업이 없어요.")}</section>}
               {composer}
             </section> : <p className="calendar-status" role="status">{error ? "이 날짜의 할 일을 불러오지 못했어요." : "할 일 불러오는 중…"}</p>)}
             {view === "mine" && <PlannerCalendar date={date} data={data} busy={busy} onChange={mutate} onSelectDate={selectDate} onManage={() => setModal("connections")} onOpenTask={openTask} />}
@@ -317,7 +328,7 @@ export default function Planner({ googleLogin = false }: { googleLogin?: boolean
         <div className="share-privacy"><LockKeyhole size={17} /><p><strong>초대된 계정만 들어올 수 있어요.</strong><span>{googleLogin ? "초대한 이메일의 Google 계정으로 로그인해 주세요." : "접근 권한을 받은 계정으로 로그인해 주세요."}</span></p></div>
         <div className="share-members"><h3>함께하는 사람 <span>{data?.members.length || 0}</span></h3>{data?.members.map((member, i) => <div key={member.id}><Avatar name={member.name} index={i} small /><span>{member.name}</span>{member.id === data.me.id && <span className="me-label">나</span>}</div>)}</div>
       </>}
-      {modal === "delete" && <><p className="dialog-description">‘{deleteChild?.title ?? deleteTask?.title}’을(를) 삭제합니다.{!deleteChild && !!deleteTask?.subtasks.length && " 하위 할 일도 함께 삭제됩니다."}</p><div className="dialog-buttons"><button className="button secondary" onClick={() => setModal(null)}>취소</button><button className="button danger" disabled={busy} onClick={async () => { if (deleteTask && await mutate({ op: deleteChild ? "subtask.delete" : "task.delete", id: deleteChild?.id ?? deleteTask.id }, "할 일을 삭제했어요.")) { setModal(null); setDeleteTask(null); setDeleteChild(null); } }}>삭제</button></div></>}
+      {modal === "delete" && <><p className="dialog-description">‘{deleteBacklog?.title ?? deleteChild?.title ?? deleteTask?.title}’을(를) 삭제합니다.{!deleteChild && Boolean(deleteTask?.subtasks.length || deleteTask?.unscheduledCount) && " 하위 할 일도 함께 삭제됩니다."}</p><div className="dialog-buttons"><button className="button secondary" onClick={() => setModal(null)}>취소</button><button className="button danger" disabled={busy} onClick={async () => { const id = deleteBacklog?.id ?? deleteChild?.id ?? deleteTask?.id; if (id && await mutate({ op: deleteBacklog ? "backlog.delete" : deleteChild ? "subtask.delete" : "task.delete", id }, "할 일을 삭제했어요.")) { setModal(null); setDeleteTask(null); setDeleteChild(null); setDeleteBacklog(null); } }}>삭제</button></div></>}
       {modal === "connections" && googleLogin && <form className="dialog-buttons" method="post" action="/auth/google/logout"><button className="button secondary">로그아웃</button></form>}
     </div></dialog>
   </div>;

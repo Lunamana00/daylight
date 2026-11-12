@@ -79,7 +79,7 @@ export function PlannerCalendar({ date, data, busy, onSelectDate, onManage, onCh
       <div className="planner-week-scroll"><div className="planner-week-board" style={{ "--selected-start": `${offset / 7 * 100}%`, "--selected-end": `${(offset + 1) / 7 * 100}%` } as CSSProperties}>
         <div className="calendar-week-dates">{week.map((key, index) => <button key={key} className={`${key === date ? "selected" : ""} ${key === today() ? "actual-today" : ""}`} aria-pressed={key === date} aria-label={dateLabel(key)} disabled={busy || key < "2000-01-01" || key > "2100-09-01"} onClick={() => onSelectDate(key)}><span>{["월", "화", "수", "목", "금", "토", "일"][index]}</span><strong>{Number(key.slice(5, 7))}.{Number(key.slice(8))}</strong></button>)}</div>
         <div className="calendar-week-tasks" ref={taskBoard}>{calendarWeekLayout(current?.tasks ?? [], week[0], week[6]).map(({ task, column, span, row }) => {
-          if (!task.subtasks.length && (!task.endDate || task.endDate === task.date)) {
+          if (!task.subtasks.length && !task.unscheduledCount && (!task.endDate || task.endDate === task.date)) {
             return <section className="calendar-week-task-row" key={task.id} aria-label={task.title} data-column={column} data-span={span} style={{ gridColumn: column, gridRow: row }}>
               <div className={`calendar-task-group task-color ${task.projectId ? "" : "task-unassigned"}`} style={{ "--task-hue": taskHue(task) } as CSSProperties}>
                 {task.projectTitle && <small className="calendar-project-label"><i className="project-color-dot" aria-hidden="true" />{task.projectTitle}</small>}
@@ -100,7 +100,7 @@ export function PlannerCalendar({ date, data, busy, onSelectDate, onManage, onCh
               aria-label={`${task.title} 제목·기간 수정`}
               title={`${task.title} · ${dateLabel(task.date)} – ${dateLabel(taskEnd)} · 수정`}
             >
-              {task.date < from && <span aria-hidden="true">‹</span>}<span className="week-period-title">{task.projectTitle && <small className="calendar-project-label"><i className="project-color-dot" aria-hidden="true" />{task.projectTitle}</small>}<span>{task.title}</span></span>{task.subtasks.length > 0 ? <small>{task.subtasks.filter(child => child.done).length}/{task.subtasks.length}</small> : task.done ? <Check size={12} /> : null}<Pencil size={12} aria-hidden="true" />{taskEnd > to && <span aria-hidden="true">›</span>}
+              {task.date < from && <span aria-hidden="true">‹</span>}<span className="week-period-title">{task.projectTitle && <small className="calendar-project-label"><i className="project-color-dot" aria-hidden="true" />{task.projectTitle}</small>}<span>{task.title}</span></span>{task.subtasks.length + (task.unscheduledCount ?? 0) > 0 ? <small>{task.subtasks.filter(child => child.done).length}/{task.subtasks.length + (task.unscheduledCount ?? 0)}</small> : task.done ? <Check size={12} /> : null}<Pencil size={12} aria-hidden="true" />{taskEnd > to && <span aria-hidden="true">›</span>}
             </button>
             {week.slice(column - 1, column - 1 + span).map((key, index) => {
               const children = task.subtasks.filter(child => child.date === key);

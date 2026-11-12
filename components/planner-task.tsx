@@ -3,7 +3,8 @@
 import { useEffect, useState, type CSSProperties } from "react";
 import { ArrowDown, ArrowRight, ArrowUp, Check, FolderOpen, GripVertical, MoreHorizontal, Pencil, Star, Trash2, X } from "lucide-react";
 import { addDays, taskHue } from "../lib/planner-core";
-import type { Subtask, Task, TaskProject } from "../lib/planner-core";
+import type { BacklogItem, Subtask, Task, TaskProject } from "../lib/planner-core";
+import { PlannerBacklog } from "./planner-backlog";
 
 type Props = {
   task: Task; projects: TaskProject[]; date: string; busy: boolean; readOnly: boolean;
@@ -13,6 +14,8 @@ type Props = {
   initialChildId?: string;
   grouped?: boolean;
   showDate?: boolean;
+  backlog?: BacklogItem[];
+  onDeleteBacklog?: (item: BacklogItem) => void;
   draggedTask: Pick<Task, "id" | "done" | "date" | "endDate"> | null;
   onDragStart: () => void; onDragEnd: () => void;
   onChange: (input: Record<string, unknown>, message?: string) => Promise<boolean>;
@@ -21,7 +24,7 @@ type Props = {
 };
 const label = (date: string) => `${Number(date.slice(5, 7))}.${Number(date.slice(8))}`;
 
-export function PlannerTask({ task, projects, date, busy, readOnly, reorderable = true, initialEditing = false, initialChildId, grouped = false, showDate = false, previousTaskId, nextTaskId, draggedTask, onDragStart, onDragEnd, onChange, onDelete, onOpenWorkLog }: Props) {
+export function PlannerTask({ task, projects, date, busy, readOnly, reorderable = true, initialEditing = false, initialChildId, grouped = false, showDate = false, backlog = [], onDeleteBacklog, previousTaskId, nextTaskId, draggedTask, onDragStart, onDragEnd, onChange, onDelete, onOpenWorkLog }: Props) {
   const [menu, setMenu] = useState(false);
   const [dropPosition, setDropPosition] = useState<"before" | "after" | null>(null);
   useEffect(() => setDropPosition(null), [draggedTask?.id]);
@@ -30,15 +33,24 @@ export function PlannerTask({ task, projects, date, busy, readOnly, reorderable 
   const [start, setStart] = useState(task.date);
   const [end, setEnd] = useState(task.endDate ?? task.date);
   const [childTitle, setChildTitle] = useState("");
-  const [childDate, setChildDate] = useState(date < task.date ? task.date : date > (task.endDate ?? task.date) ? (task.endDate ?? task.date) : date);
+  const [childDate, setChildDate] = useState("");
   const [editChild, setEditChild] = useState<Subtask | null>(() => !readOnly && initialChildId ? task.subtasks.find(child => child.id === initialChildId) ?? null : null);
-  const [addingChild, setAddingChild] = useState(!grouped);
+  const [addingChild, setAddingChild] = useState(false);
   const children = task.subtasks;
+  const childCount = children.length + (task.unscheduledCount ?? 0);
   const completed = children.filter(child => child.done).length;
   const move = (targetId?: string) => targetId && onChange({ op: "task.move", id: task.id, targetId, date }, "순서를 변경했어요.");
   const dragging = draggedTask?.id === task.id;
   const canDrop = reorderable && !readOnly && !busy && draggedTask && !dragging && draggedTask.done === task.done && draggedTask.date <= date && (draggedTask.endDate ?? draggedTask.date) >= date;
   const startEditing = () => { setTitle(task.title); setStart(task.date); setEnd(task.endDate ?? task.date); setEditing(true); setMenu(false); };
+  const childComposer = !readOnly && (addingChild ? <form className="subtask-form subtask-add" onSubmit={async event => {
+    event.preventDefault();
+    if (await onChange({ op: childDate ? "subtask.add" : "backlog.add", taskId: task.id, title: childTitle, date: childDate || undefined })) { setChildTitle(""); setAddingChild(false); }
+  }}>
+    <input autoFocus value={childTitle} onChange={event => setChildTitle(event.target.value)} placeholder="하위 할 일" aria-label={`${task.title} 하위 할 일 추가`} maxLength={240} required disabled={busy} />
+    <label className="subtask-date-picker">날짜 (선택)<input type="date" value={childDate} min={task.date} max={task.endDate ?? task.date} onChange={event => setChildDate(event.target.value)} aria-label="하위 할 일 날짜, 비우면 날짜 미정" disabled={busy} /></label>
+    <button className="text-button" disabled={busy || !childTitle.trim()}>추가</button><button type="button" className="icon-button" aria-label="하위 할 일 추가 닫기" disabled={busy} onClick={() => setAddingChild(false)}><X size={12} /></button>
+  </form> : <button className="text-button subtask-add-toggle" disabled={busy} onClick={() => { setChildDate(""); setAddingChild(true); }}>＋ 하위 할 일</button>);
 
   return <li className={`task-item task-color ${task.projectId ? "" : "task-unassigned"} ${children.length || task.endDate ? "task-family" : ""} ${dragging ? "task-drag-source" : ""} ${canDrop && dropPosition ? `task-drop-${dropPosition}` : ""}`} style={{ "--task-hue": taskHue(task) } as CSSProperties}
     onDragOver={event => {
@@ -78,10 +90,10 @@ export function PlannerTask({ task, projects, date, busy, readOnly, reorderable 
         }}
         onDragEnd={() => { setDropPosition(null); onDragEnd(); }}
         onKeyDown={event => { if (event.key === "ArrowUp" || event.key === "ArrowDown") { event.preventDefault(); void move(event.key === "ArrowUp" ? previousTaskId : nextTaskId); } }}><GripVertical size={14} /></button>}
-      {!grouped && <button className={`task-check ${task.done ? "checked" : ""}`} disabled={busy || readOnly || children.length > 0}
+      {!grouped && <button className={`task-check ${task.done ? "checked" : ""}`} disabled={busy || readOnly || childCount > 0}
         onClick={() => void onChange({ op: "task.patch", id: task.id, done: !task.done })}
-        aria-label={`${task.title} ${children.length ? `${completed}/${children.length} 완료` : task.done ? "완료 취소" : "완료"}`}
-        title={children.length ? "하위 할 일을 모두 완료하면 완료됩니다" : undefined}>
+        aria-label={`${task.title} ${childCount ? `${completed}/${childCount} 완료` : task.done ? "완료 취소" : "완료"}`}
+        title={childCount ? "하위 할 일을 모두 완료하면 완료됩니다" : undefined}>
         {task.done ? <Check size={13} strokeWidth={3} /> : null}
       </button>}
       {editing && !readOnly ? <form className="task-edit-form" onSubmit={async event => {
@@ -104,15 +116,15 @@ export function PlannerTask({ task, projects, date, busy, readOnly, reorderable 
             <button disabled={busy || !nextTaskId} onClick={async () => { if (await move(nextTaskId)) setMenu(false); }}><ArrowDown size={13} />아래로 이동</button></>}
             {onOpenWorkLog && <button onClick={() => { onOpenWorkLog(task); setMenu(false); }}><FolderOpen size={13} />{task.projectId ? "프로젝트·기록 보기" : "프로젝트 연결"}</button>}
             <button disabled={busy} onClick={startEditing}><Pencil size={13} />제목·기간 수정</button>
-            {grouped && !children.length && <button disabled={busy} onClick={async () => { if (await onChange({ op: "task.patch", id: task.id, done: !task.done })) setMenu(false); }}><Check size={13} />{task.done ? "완료 취소" : "완료"}</button>}
-            {!task.endDate && !children.length && <button disabled={busy || date >= "2100-09-01"} onClick={async () => { if (await onChange({ op: "task.patch", id: task.id, date: addDays(date, 1), done: false }, "다음 날 할 일로 옮겼어요.")) setMenu(false); }}><ArrowRight size={13} />다음 날로 옮기기</button>}
+            {grouped && !childCount && <button disabled={busy} onClick={async () => { if (await onChange({ op: "task.patch", id: task.id, done: !task.done })) setMenu(false); }}><Check size={13} />{task.done ? "완료 취소" : "완료"}</button>}
+            {!task.endDate && !childCount && <button disabled={busy || date >= "2100-09-01"} onClick={async () => { if (await onChange({ op: "task.patch", id: task.id, date: addDays(date, 1), done: false }, "다음 날 할 일로 옮겼어요.")) setMenu(false); }}><ArrowRight size={13} />다음 날로 옮기기</button>}
             <button className="danger-text" onClick={() => { onDelete(task); setMenu(false); }}><Trash2 size={13} />삭제</button>
           </div>}
         </div>
       </div>}
     </div>
-    {(task.endDate || children.length > 0) && <details className="subtasks" open>
-      <summary>하위 할 일 {children.length > 0 && <span>{completed} / {children.length}</span>}</summary>
+    {children.length + backlog.length > 0 ? <details className="subtasks" open>
+      <summary>하위 할 일 <span>{completed} / {childCount}</span></summary>
       {children.length > 0 && <ul>{children.map((child, index) => <li key={child.id} className={`subtask-row ${child.date === date ? "subtask-today" : ""}`}>
         <button className={`task-check ${child.done ? "checked" : ""}`} disabled={busy || readOnly} onClick={() => void onChange({ op: "subtask.patch", id: child.id, done: !child.done })} aria-label={`${child.title} ${child.done ? "완료 취소" : "완료"}`}>
           {child.done ? <Check size={12} strokeWidth={3} /> : null}
@@ -133,17 +145,9 @@ export function PlannerTask({ task, projects, date, busy, readOnly, reorderable 
           {!readOnly && <><button className="icon-button" aria-label={`${child.title} 수정`} disabled={busy} onClick={() => setEditChild({ ...child })}><Pencil size={12} /></button><button className="icon-button" aria-label={`${child.title} 삭제`} disabled={busy} onClick={() => onDelete(task, child)}><Trash2 size={12} /></button></>}
         </>}
       </li>)}</ul>}
-      {!readOnly && !addingChild && <button className="text-button subtask-add-toggle" disabled={busy} onClick={() => setAddingChild(true)}>＋ 하위 할 일</button>}
-      {!readOnly && addingChild && <form className="subtask-form subtask-add" onSubmit={async event => {
-        event.preventDefault();
-        if (await onChange({ op: "subtask.add", taskId: task.id, title: childTitle, date: childDate })) setChildTitle("");
-      }}>
-        <input value={childTitle} onChange={event => setChildTitle(event.target.value)} placeholder="하위 할 일" aria-label={`${task.title} 하위 할 일 추가`} maxLength={240} required disabled={busy} />
-        <input type="date" value={childDate} min={task.date} max={task.endDate ?? task.date} required onChange={event => setChildDate(event.target.value)} aria-label="하위 할 일 날짜" disabled={busy} />
-        <button className="text-button" disabled={busy || !childTitle.trim()}>추가</button>
-        {grouped && <button type="button" className="icon-button" aria-label="하위 할 일 추가 닫기" disabled={busy} onClick={() => setAddingChild(false)}><X size={12} /></button>}
-      </form>}
-    </details>}
+      {!readOnly && backlog.length > 0 && onDeleteBacklog && <div className="subtask-backlog"><span className="tiny muted">날짜 미정</span><PlannerBacklog items={backlog} date={date} busy={busy} showParent={false} onChange={onChange} onDelete={onDeleteBacklog} /></div>}
+      {childComposer}
+    </details> : !readOnly && (task.endDate || grouped) && <div className="subtasks">{childComposer}</div>}
   </li>;
 }
 
@@ -156,7 +160,7 @@ export function PlannerDailySubtask({ task, child, date, busy, onChange, onOpenT
   return <li className={`task-item daily-subtask-row task-color ${task.projectId ? "" : "task-unassigned"}`} style={{ "--task-hue": taskHue(task) } as CSSProperties}>
     {task.projectTitle && <div className="daily-task-project"><span className="project-color-dot" aria-hidden="true" />{task.projectTitle}</div>}
     <div className={`task-row ${child.done ? "is-done" : ""}`}>
-      <button className={`task-check ${child.done ? "checked" : ""}`} disabled={busy} aria-label={`${child.title} ${child.done ? "완료 취소" : "완료"}`} onClick={() => void onChange({ op: "subtask.patch", id: child.id, done: !child.done })}>{child.done && <Check size={13} strokeWidth={3} />}</button>
+      <button className={`task-check ${child.done ? "checked" : ""}`} disabled={busy} aria-label={`${child.title} ${child.done ? "완료 취소" : "완료"}`} onClick={() => void onChange({ op: "subtask.patch", id: child.id, done: !child.done })}>{child.done ? <Check size={13} strokeWidth={3} /> : null}</button>
       <div className="task-content"><button className="task-title task-title-edit" disabled={busy} onClick={() => onOpenTask(task, child.id)}>{child.title}</button><button className="daily-parent-link" disabled={busy} onClick={() => onOpenTask(task)}>{task.title}</button></div>
       <div className="task-actions">
         <span className="subtask-order-actions"><button className="icon-button" aria-label={`${child.title} 위로 이동`} disabled={busy || !siblings[index - 1]} onClick={() => void onChange({ op: "subtask.move", id: child.id, targetId: siblings[index - 1].id, date }, "순서를 변경했어요.")}><ArrowUp size={12} /></button><button className="icon-button" aria-label={`${child.title} 아래로 이동`} disabled={busy || !siblings[index + 1]} onClick={() => void onChange({ op: "subtask.move", id: child.id, targetId: siblings[index + 1].id, date }, "순서를 변경했어요.")}><ArrowDown size={12} /></button></span>

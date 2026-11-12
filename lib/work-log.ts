@@ -75,7 +75,7 @@ export async function readWorkDetail(db: D1Database, ownerId: string, artifactId
     ORDER BY e.occurred_at DESC,e.id DESC LIMIT ?`).bind(ownerId, artifactId, stageId || null, stageId || null, beforeTime, beforeTime, beforeTime, beforeId, Number(materialsOnly), limit + 1).all<Omit<WorkEntry, "links" | "files"> & { links: string }>();
   const page = records.results.slice(0, limit);
   const files = page.length ? (await db.prepare("SELECT id,entry_id AS entryId,file_name AS fileName,content_type AS contentType,size,created_at AS createdAt FROM work_files WHERE owner_id=? AND entry_id IN (SELECT value FROM json_each(?)) ORDER BY created_at,id").bind(ownerId, JSON.stringify(page.map(e => e.id))).all<WorkFile>()).results : [];
-  const tasks = artifactId ? (await db.prepare("SELECT t.id,t.title,t.date,t.end_date AS endDate,t.done,l.stage_id AS stageId FROM tasks t JOIN work_task_links l ON l.task_id=t.id WHERE l.artifact_id=? AND t.owner_id=? ORDER BY t.created_at,t.rowid").bind(artifactId, ownerId).all<WorkTask>()).results : [];
+  const tasks = artifactId ? (await db.prepare("SELECT t.id,t.title,t.date,t.end_date AS endDate,t.done,l.stage_id AS stageId,(SELECT count(*) FROM task_backlog b WHERE b.task_id=t.id) AS unscheduledCount FROM tasks t JOIN work_task_links l ON l.task_id=t.id WHERE l.artifact_id=? AND t.owner_id=? ORDER BY t.created_at,t.rowid").bind(artifactId, ownerId).all<WorkTask>()).results : [];
   const children = artifactId ? (await db.prepare("SELECT s.id,s.task_id AS taskId,s.title,s.date,s.done FROM task_subtasks s JOIN tasks t ON t.id=s.task_id JOIN work_task_links l ON l.task_id=t.id WHERE l.artifact_id=? AND t.owner_id=? ORDER BY s.date,s.created_at,s.rowid").bind(artifactId, ownerId).all<WorkTask["subtasks"][number] & { taskId: string }>()).results : [];
   const stages = artifactId ? (await db.prepare("SELECT id,title,position,status FROM work_stages WHERE artifact_id=? ORDER BY position,id").bind(artifactId).all<WorkStage>()).results : [];
   const connections = artifactId ? (await db.prepare("SELECT id,artifact_id AS artifactId,provider,scope,expires_at AS expiresAt,last_sync_at AS lastSyncAt,revoked_at AS revokedAt FROM work_connections WHERE owner_id=? AND artifact_id=? ORDER BY created_at DESC").bind(ownerId, artifactId).all<WorkConnection>()).results : [];
@@ -83,12 +83,24 @@ export async function readWorkDetail(db: D1Database, ownerId: string, artifactId
   return {
     entries: page.map(entry => ({ ...entry, links: JSON.parse(entry.links) as WorkLink[], files: files.filter(file => file.entryId === entry.id) })),
     nextCursor: records.results.length > limit ? `${last.occurredAt}|${last.id}` : null,
-    tasks: tasks.map(task => { const subtasks = children.filter(child => child.taskId === task.id); return { ...task, subtasks, done: subtasks.length ? Number(subtasks.every(child => child.done)) : task.done }; }), stages, connections,
+    tasks: tasks.map(task => { const subtasks = children.filter(child => child.taskId === task.id); return { ...task, subtasks, done: task.unscheduledCount ? 0 : subtasks.length ? Number(subtasks.every(child => child.done)) : task.done }; }), stages, connections,
   };
 }
 export async function changeWork(db: D1Database, user: Identity, input: Record<string, unknown>) {
   await ensureMember(db, user);
   const now = new Date().toISOString();
+  if (input.op === "artifact.delete") {
+    const artifact = await ownedArtifact(db, user.userId, input.id);
+    await db.batch([
+      db.prepare("UPDATE work_entries SET artifact_id=NULL,stage_id=NULL,task_id=NULL,subtask_id=NULL WHERE artifact_id=? AND owner_id=?").bind(artifact.id, user.userId),
+      db.prepare("DELETE FROM work_task_links WHERE artifact_id=? AND task_id IN (SELECT id FROM tasks WHERE owner_id=?)").bind(artifact.id, user.userId),
+      db.prepare("DELETE FROM work_connections WHERE artifact_id=? AND owner_id=?").bind(artifact.id, user.userId),
+      db.prepare("DELETE FROM work_github_connections WHERE artifact_id=? AND owner_id=?").bind(artifact.id, user.userId),
+      db.prepare("DELETE FROM work_stages WHERE artifact_id=?").bind(artifact.id),
+      db.prepare("DELETE FROM work_artifacts WHERE id=? AND owner_id=?").bind(artifact.id, user.userId),
+    ]);
+    return { deleted: true };
+  }
   if (input.op === "artifact.color") {
     const artifact = await ownedArtifact(db, user.userId, input.id);
     const hue = input.colorHue;

@@ -416,11 +416,32 @@ input:focus-visible,textarea:focus-visible,select:focus-visible{outline:2px soli
 .task-workspace .subtasks{margin:5px 0 0 28px}
 .task-workspace .subtasks>ul{border-left:1px solid var(--border);padding-left:9px}
 .task-workspace .subtasks summary{font-size:11px;padding-bottom:5px}
-.task-workspace .subtask-row{padding:7px 0;gap:5px;flex-wrap:wrap;align-items:center}
+.task-workspace .subtask-row{padding:10px 12px;gap:10px;flex-wrap:wrap;align-items:center}
 .task-workspace .subtask-title{font-size:12px;flex-basis:90px}
 .task-workspace .subtask-today{background:transparent}
 .task-workspace .subtask-order-actions .icon-button{width:20px}
 .subtask-add-toggle{margin:7px 0 2px;font-size:11px}
+.subtasks .subtask-row .task-check{margin:0;align-self:center}
+.subtask-date-picker{display:flex;flex-direction:column;gap:3px;font-size:10px;color:var(--muted)}
+.subtask-backlog{padding-top:12px}
+.task-work-scope{padding-top:12px;margin-bottom:6px}
+.task-date-unscheduled{display:flex;align-items:center;gap:7px;font-size:11px;color:var(--muted);white-space:nowrap;min-height:32px}
+.task-composer .task-date-unscheduled input{flex:none;width:14px;height:14px;padding:0;accent-color:var(--accent)}
+.task-scope-switch{flex-wrap:wrap}
+.task-backlog-pane>.backlog-list{padding:0 24px 12px}
+.backlog-list{list-style:none;margin:0;padding:0}
+.backlog-row{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--border)}
+.backlog-row:last-child{border-bottom:0}
+.backlog-content{display:flex;flex:1;min-width:0;flex-direction:column;gap:4px;font-size:12px;line-height:1.6;overflow-wrap:anywhere}
+.backlog-content>small{font-size:10px;color:var(--muted)}
+.backlog-actions{display:flex;align-items:center;gap:5px;flex-wrap:wrap;justify-content:flex-end}
+.backlog-actions .icon-button{width:24px;height:26px}
+.backlog-actions>.text-button{margin-right:4px}
+.backlog-edit{display:flex;align-items:center;gap:8px;flex-wrap:wrap;width:100%;font-size:11px}
+.backlog-edit>input{flex:1;min-width:90px}
+.backlog-edit input{background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:7px;font:inherit}
+.backlog-edit>label{display:flex;align-items:center;gap:8px;color:var(--muted)}
+.subtask-backlog .backlog-row{padding:10px 12px;margin-top:6px;background:#fafafb;border:1px dashed var(--border);border-radius:7px}
 .daily-task-project{display:flex;align-items:center;gap:5px;font-size:10px;color:var(--muted);padding:0 0 5px 25px}
 .daily-parent-link{display:block;text-align:left;font-size:11px;color:var(--muted);line-height:1.5;padding:2px 0;overflow-wrap:anywhere}
 .daily-parent-link:hover{color:var(--accent);text-decoration:underline}

@@ -71,6 +71,12 @@ export const workTaskLinks = sqliteTable("work_task_links", {
   artifactId: text("artifact_id").notNull().references(() => workArtifacts.id),
   stageId: text("stage_id").references(() => workStages.id),
 }, table => [index("work_tasks_artifact").on(table.artifactId)]);
+export const taskBacklog = sqliteTable("task_backlog", {
+  id: text("id").primaryKey(), ownerId: text("owner_id").notNull().references(() => members.id),
+  taskId: text("task_id").references(() => tasks.id, { onDelete: "cascade" }),
+  artifactId: text("artifact_id").references(() => workArtifacts.id, { onDelete: "set null" }),
+  title: text("title").notNull(), createdAt: text("created_at").notNull(), updatedAt: text("updated_at").notNull(),
+}, table => [index("task_backlog_owner").on(table.ownerId, table.createdAt), index("task_backlog_parent").on(table.taskId)]);
 export const workEntries = sqliteTable("work_entries", {
   id: text("id").primaryKey(), ownerId: text("owner_id").notNull().references(() => members.id),
   artifactId: text("artifact_id").references(() => workArtifacts.id),
