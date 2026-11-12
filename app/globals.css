@@ -428,14 +428,12 @@ input:focus-visible,textarea:focus-visible,select:focus-visible{outline:2px soli
 .subtask-date-button:hover{background:var(--accent-soft)}
 .subtask-add-footer{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-top:10px}
 .subtask-schedule-controls,.subtask-add-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-.subtask-schedule-controls select,.subtask-schedule-controls input[type="date"]{flex:none;height:32px;min-height:0;max-height:32px;box-sizing:border-box;border:1px solid var(--border);border-radius:5px;background:var(--surface);padding:5px 7px;font-size:11px;color:var(--text-secondary)}
+.task-schedule-picker,.subtask-schedule-controls select,.subtask-schedule-controls input[type="date"]{flex:none;height:32px;min-height:0;max-height:32px;box-sizing:border-box;border:1px solid var(--border);border-radius:5px;background:var(--surface);padding:5px 7px;font-size:11px;color:var(--text-secondary)}
 .subtask-schedule-controls select{max-width:100%}
 .subtask-add-actions{margin-left:auto;flex-wrap:nowrap}
 .subtask-add-actions>.text-button{padding:6px 12px;min-height:32px;border-radius:5px;background:var(--accent);color:#fff}
 .subtask-backlog{padding-top:12px}
 .task-work-scope{padding-top:12px;margin-bottom:6px}
-.task-date-unscheduled{display:flex;align-items:center;gap:7px;font-size:11px;color:var(--muted);white-space:nowrap;min-height:32px}
-.task-composer .task-date-unscheduled input{flex:none;width:14px;height:14px;padding:0;accent-color:var(--accent)}
 .task-scope-switch{flex-wrap:wrap}
 .task-backlog-pane>.backlog-list{padding:0 24px 12px}
 .backlog-list{list-style:none;margin:0;padding:0}
