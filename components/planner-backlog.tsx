@@ -1,24 +1,22 @@
 "use client";
 
 import { useState } from "react";
-import { CalendarDays, Check, Pencil, Trash2, X } from "lucide-react";
+import { CalendarDays, Check, GripVertical, Pencil, Trash2, X } from "lucide-react";
 import { today, type BacklogItem } from "../lib/planner-core";
 
 type Props = {
-  items: BacklogItem[]; date: string; busy: boolean; showParent?: boolean;
+  item: BacklogItem; date: string; busy: boolean; showParent?: boolean;
   onChange: (input: Record<string, unknown>, message?: string) => Promise<boolean>;
   onDelete: (item: BacklogItem) => void;
 };
-export function PlannerBacklog({ items, ...props }: Props) {
-  return <ul className="backlog-list">{items.map(item => <PlannerBacklogRow key={item.id} item={item} {...props} />)}</ul>;
-}
-export function PlannerBacklogRow({ item, date, busy, showParent = true, onChange, onDelete }: Omit<Props, "items"> & { item: BacklogItem }) {
+export function PlannerBacklogRow({ item, date, busy, showParent = true, onChange, onDelete }: Props) {
   const [editing, setEditing] = useState<"title" | "date" | null>(null);
   const [title, setTitle] = useState(item.title);
   const [scheduledDate, setScheduledDate] = useState(date < (item.taskDate ?? date) ? item.taskDate! : date > (item.taskEndDate ?? date) ? item.taskEndDate! : date);
   const currentDay = today();
   const canScheduleToday = !item.taskId || currentDay >= item.taskDate! && currentDay <= item.taskEndDate!;
-  return <li className="backlog-row">
+  return <li className={`backlog-row ${showParent ? "" : "subtask-row"}`} data-sort-id={item.id} data-sort-done={item.done ?? 0} data-sort-group={showParent ? "tasks" : undefined}>
+    {!editing && <button type="button" className="icon-button task-order-handle" data-sort-handle draggable={!busy} disabled={busy} aria-label={`${item.title} 순서 변경, 위아래 방향키로 이동`} title="드래그하거나 ↑ ↓ 키로 순서 변경"><GripVertical size={14} /></button>}
     {editing ? <form className="backlog-edit" onSubmit={async event => {
       event.preventDefault();
       const input = editing === "title" ? { op: "backlog.patch", id: item.id, title } : { op: "backlog.schedule", id: item.id, date: scheduledDate };

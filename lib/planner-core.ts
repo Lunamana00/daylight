@@ -3,7 +3,7 @@ export type Identity = { userId: string; email: string; fullName?: string | null
 export type Member = { id: string; name: string };
 export type Subtask = { id: string; taskId: string; date: string | null; title: string; done: number; sortOrder: number };
 export type Task = { id: string; ownerId: string; date: string; endDate: string | null; title: string; done: number; important: number; sortOrder: number; createdAt: string; updatedAt: string; ownerName: string; subtasks: Subtask[]; unscheduledCount?: number; projectId?: string | null; projectTitle?: string | null; projectHue?: number | null };
-export type BacklogItem = { id: string; title: string; taskId: string | null; taskTitle: string | null; taskDate: string | null; taskEndDate: string | null; projectId: string | null; projectTitle: string | null; projectHue: number | null; subtask?: number; done?: number };
+export type BacklogItem = { id: string; title: string; sortOrder: number; taskId: string | null; taskTitle: string | null; taskDate: string | null; taskEndDate: string | null; projectId: string | null; projectTitle: string | null; projectHue: number | null; subtask?: number; done?: number };
 export type TaskProject = { id: string; title: string };
 export type Note = { ownerId: string; date: string; content: string; updatedAt: string; ownerName: string };
 export type Milestone = { ownerId: string; calendarId: string; eventId: string; title: string; date: string; url: string | null; ownerName: string; sourceName: string; syncedAt: string };
@@ -61,10 +61,10 @@ export async function readTaskCatalog(db: D1Database, user: Identity) {
   return readTasks(db, "2000-01-01", "2100-12-31", user.userId);
 }
 export async function readBacklog(db: D1Database, user: Identity) {
-  return (await db.prepare(`SELECT b.id,b.title,b.task_id AS taskId,t.title AS taskTitle,t.date AS taskDate,COALESCE(t.end_date,t.date) AS taskEndDate,a.id AS projectId,a.title AS projectTitle,a.color_hue AS projectHue,b.subtask,b.done FROM (
-    SELECT id,title,task_id,artifact_id,owner_id,created_at,rowid AS position,0 AS subtask,0 AS done FROM task_backlog WHERE owner_id=?
-    UNION ALL SELECT s.id,s.title,s.task_id,NULL,t.owner_id,s.created_at,s.sort_order,1,s.done FROM task_subtasks s JOIN tasks t ON t.id=s.task_id WHERE t.owner_id=? AND s.scheduled=0
-  ) b LEFT JOIN tasks t ON t.id=b.task_id AND t.owner_id=b.owner_id LEFT JOIN work_task_links l ON l.task_id=t.id LEFT JOIN work_artifacts a ON a.id=CASE WHEN b.task_id IS NULL THEN b.artifact_id ELSE l.artifact_id END AND a.owner_id=b.owner_id ORDER BY b.done,b.created_at,b.position,b.id`).bind(user.userId, user.userId).all<BacklogItem>()).results;
+  return (await db.prepare(`SELECT b.id,b.title,b.sort_order AS sortOrder,b.task_id AS taskId,t.title AS taskTitle,t.date AS taskDate,COALESCE(t.end_date,t.date) AS taskEndDate,a.id AS projectId,a.title AS projectTitle,a.color_hue AS projectHue,b.subtask,b.done FROM (
+    SELECT id,title,sort_order,task_id,artifact_id,owner_id,created_at,rowid AS position,0 AS subtask,0 AS done FROM task_backlog WHERE owner_id=?
+    UNION ALL SELECT s.id,s.title,s.sort_order,s.task_id,NULL,t.owner_id,s.created_at,s.sort_order,1,s.done FROM task_subtasks s JOIN tasks t ON t.id=s.task_id WHERE t.owner_id=? AND s.scheduled=0
+  ) b LEFT JOIN tasks t ON t.id=b.task_id AND t.owner_id=b.owner_id LEFT JOIN work_task_links l ON l.task_id=t.id LEFT JOIN work_artifacts a ON a.id=CASE WHEN b.task_id IS NULL THEN b.artifact_id ELSE l.artifact_id END AND a.owner_id=b.owner_id ORDER BY b.done,b.sort_order,b.created_at,b.position,b.id`).bind(user.userId, user.userId).all<BacklogItem>()).results;
 }
 export function dailyTaskItems(tasks: Task[], date: string): Array<{ id: string; title: string; done: boolean; parentTitle: string | null; subtask: boolean }> {
   return tasks.flatMap<{ id: string; title: string; done: boolean; parentTitle: string | null; subtask: boolean }>(task => task.subtasks.length
@@ -194,7 +194,7 @@ export async function change(db: D1Database, user: Identity, input: Record<strin
     const projectId = input.projectId == null ? null : text(input.projectId, "프로젝트", 100);
     if (parentId && !(await db.prepare("SELECT id FROM tasks WHERE id=? AND owner_id=?").bind(parentId, user.userId).all()).results.length) throw new PlannerError("본인의 작업을 선택해 주세요.", 403);
     if (projectId && !(await db.prepare("SELECT id FROM work_artifacts WHERE id=? AND owner_id=?").bind(projectId, user.userId).all()).results.length) throw new PlannerError("본인의 프로젝트를 선택해 주세요.", 403);
-    await db.prepare("INSERT INTO task_backlog (id,owner_id,task_id,artifact_id,title,created_at,updated_at) VALUES (?,?,?,?,?,?,?)").bind(id, user.userId, parentId, parentId ? null : projectId, title, now, now).run();
+    await db.prepare("INSERT INTO task_backlog (id,owner_id,task_id,artifact_id,title,created_at,updated_at,sort_order) VALUES (?,?,?,?,?,?,?,(SELECT COALESCE(MAX(sort_order),0)+1 FROM (SELECT sort_order FROM tasks WHERE owner_id=? AND ? IS NULL UNION ALL SELECT sort_order FROM task_subtasks WHERE task_id=? UNION ALL SELECT sort_order FROM task_backlog WHERE owner_id=? AND task_id IS ?)))").bind(id, user.userId, parentId, parentId ? null : projectId, title, now, now, user.userId, parentId, parentId, user.userId, parentId).run();
     return { id };
   }
   if (input.op === "backlog.patch" || input.op === "backlog.delete" || input.op === "backlog.schedule") {
@@ -212,9 +212,9 @@ export async function change(db: D1Database, user: Identity, input: Record<strin
     const item = (await db.prepare("SELECT task_id AS taskId FROM task_backlog WHERE id=? AND owner_id=?").bind(id, user.userId).all<{ taskId: string | null }>()).results[0];
     if (!item) throw new PlannerError("이미 날짜를 정했거나 삭제된 할 일이에요.", 409);
     const statements = item.taskId ? [
-      db.prepare("INSERT INTO task_subtasks (id,task_id,date,title,done,created_at,updated_at,sort_order) SELECT b.id,b.task_id,?,b.title,0,b.created_at,?,(SELECT COALESCE(MAX(sort_order),0)+1 FROM task_subtasks WHERE task_id=b.task_id) FROM task_backlog b JOIN tasks t ON t.id=b.task_id AND t.owner_id=b.owner_id WHERE b.id=? AND b.owner_id=? AND ? BETWEEN t.date AND COALESCE(t.end_date,t.date)").bind(date, now, id, user.userId, date),
+      db.prepare("INSERT INTO task_subtasks (id,task_id,date,title,done,created_at,updated_at,sort_order) SELECT b.id,b.task_id,?,b.title,0,b.created_at,?,b.sort_order FROM task_backlog b JOIN tasks t ON t.id=b.task_id AND t.owner_id=b.owner_id WHERE b.id=? AND b.owner_id=? AND ? BETWEEN t.date AND COALESCE(t.end_date,t.date)").bind(date, now, id, user.userId, date),
     ] : [
-      db.prepare("INSERT INTO tasks (id,owner_id,date,title,done,important,created_at,updated_at,sort_order) SELECT b.id,b.owner_id,?,b.title,0,0,b.created_at,?,(SELECT COALESCE(MAX(sort_order),0)+1 FROM tasks WHERE owner_id=b.owner_id) FROM task_backlog b WHERE b.id=? AND b.owner_id=? AND b.task_id IS NULL").bind(date, now, id, user.userId),
+      db.prepare("INSERT INTO tasks (id,owner_id,date,title,done,important,created_at,updated_at,sort_order) SELECT b.id,b.owner_id,?,b.title,0,0,b.created_at,?,b.sort_order FROM task_backlog b WHERE b.id=? AND b.owner_id=? AND b.task_id IS NULL").bind(date, now, id, user.userId),
       db.prepare("INSERT INTO work_task_links (task_id,artifact_id) SELECT b.id,b.artifact_id FROM task_backlog b JOIN tasks t ON t.id=b.id AND t.owner_id=b.owner_id WHERE b.id=? AND b.owner_id=? AND b.artifact_id IS NOT NULL").bind(id, user.userId),
     ];
     statements.push(db.prepare(`DELETE FROM task_backlog WHERE id=? AND owner_id=? AND EXISTS (SELECT 1 FROM ${item.taskId ? "task_subtasks" : "tasks"} WHERE id=task_backlog.id)`).bind(id, user.userId));
@@ -224,10 +224,17 @@ export async function change(db: D1Database, user: Identity, input: Record<strin
   }
   if (input.op === "task.move" || input.op === "subtask.move") {
     const id = text(input.id, "할 일 ID", 100), targetId = text(input.targetId, "이동할 위치", 100);
-    const date = day(input.date);
-    const tasks = await readTasks(db, date, date, user.userId);
+    if (input.scope !== undefined && input.scope !== "day" && input.scope !== "all") throw new PlannerError("올바른 작업 목록이 아닙니다.");
+    const date = input.scope === "all" ? null : day(input.date);
+    const tasks = date ? await readTasks(db, date, date, user.userId) : await readTaskCatalog(db, user);
+    const backlog = date ? [] : (await readBacklog(db, user)).filter(item => !item.subtask);
     const isChild = input.op === "subtask.move";
-    const siblings = isChild ? tasks.find(task => task.subtasks.some(child => child.id === id))?.subtasks ?? [] : tasks;
+    const parentId = backlog.find(item => item.id === id)?.taskId;
+    const parent = isChild ? tasks.find(task => task.id === parentId || task.subtasks.some(child => child.id === id)) : undefined;
+    const siblings = [
+      ...(isChild ? parent?.subtasks ?? [] : tasks).map(item => ({ id: item.id, done: item.done, sortOrder: item.sortOrder, kind: isChild ? "subtask" : "task" })),
+      ...backlog.filter(item => isChild ? Boolean(parent) && item.taskId === parent!.id : !item.taskId).map(item => ({ id: item.id, done: 0, sortOrder: item.sortOrder, kind: "backlog" })),
+    ].sort((a, b) => a.sortOrder - b.sortOrder);
     const source = siblings.find(item => item.id === id), target = siblings.find(item => item.id === targetId);
     if (!source || !target) throw new PlannerError("같은 목록에 있는 본인의 할 일만 옮길 수 있어요.", 403);
     if (source.done !== target.done) throw new PlannerError("완료한 할 일은 목록 아래에 표시됩니다.", 409);
@@ -239,7 +246,9 @@ export async function change(db: D1Database, user: Identity, input: Record<strin
     const [moving] = ordered.splice(from, 1);
     const targetIndex = ordered.findIndex(item => item.id === targetId);
     ordered.splice(input.position === undefined ? to : targetIndex + Number(input.position === "after"), 0, moving);
-    await db.batch(ordered.map((item, index) => isChild
+    await db.batch(ordered.map((item, index) => item.kind === "backlog"
+      ? db.prepare("UPDATE task_backlog SET sort_order=?,updated_at=? WHERE id=? AND owner_id=?").bind(positions[index], now, item.id, user.userId)
+      : item.kind === "subtask"
       ? db.prepare("UPDATE task_subtasks SET sort_order=?,updated_at=? WHERE id=? AND task_id IN (SELECT id FROM tasks WHERE owner_id=?)").bind(positions[index], now, item.id, user.userId)
       : db.prepare("UPDATE tasks SET sort_order=?,updated_at=? WHERE id=? AND owner_id=?").bind(positions[index], now, item.id, user.userId)));
     return { saved: true };
@@ -265,7 +274,7 @@ export async function change(db: D1Database, user: Identity, input: Record<strin
     if (endDate && endDate < date) throw new PlannerError("종료일은 시작일 이후로 선택해주세요.");
     const projectId = input.projectId == null ? null : text(input.projectId, "프로젝트", 100);
     if (projectId && !(await db.prepare("SELECT id FROM work_artifacts WHERE id=? AND owner_id=?").bind(projectId, user.userId).all()).results.length) throw new PlannerError("본인의 프로젝트를 선택해 주세요.", 403);
-    const statements = [db.prepare("INSERT INTO tasks (id,owner_id,date,end_date,title,done,important,created_at,updated_at,sort_order) VALUES (?,?,?,?,?,0,?,?,?,(SELECT COALESCE(MAX(sort_order),0)+1 FROM tasks WHERE owner_id=?))").bind(id, user.userId, date, endDate, text(input.title, "할 일", 240), input.important === undefined ? 0 : bool(input.important), now, now, user.userId)];
+    const statements = [db.prepare("INSERT INTO tasks (id,owner_id,date,end_date,title,done,important,created_at,updated_at,sort_order) VALUES (?,?,?,?,?,0,?,?,?,(SELECT COALESCE(MAX(sort_order),0)+1 FROM (SELECT sort_order FROM tasks WHERE owner_id=? UNION ALL SELECT sort_order FROM task_backlog WHERE owner_id=? AND task_id IS NULL)))").bind(id, user.userId, date, endDate, text(input.title, "할 일", 240), input.important === undefined ? 0 : bool(input.important), now, now, user.userId, user.userId)];
     if (projectId) statements.push(db.prepare("INSERT INTO work_task_links (task_id,artifact_id) VALUES (?,?)").bind(id, projectId));
     await db.batch(statements);
     return { id };
@@ -287,7 +296,7 @@ export async function change(db: D1Database, user: Identity, input: Record<strin
     if (date !== null && (date < task.date || date > (task.endDate ?? task.date))) throw new PlannerError("하위 할 일의 날짜는 전체 할 일 기간 안에서 선택해주세요.");
     let result;
     if (adding) {
-      result = await db.prepare("INSERT INTO task_subtasks (id,task_id,date,scheduled,title,done,created_at,updated_at,sort_order) SELECT ?,id,?,?,?,?,?,?,(SELECT COALESCE(MAX(sort_order),0)+1 FROM task_subtasks WHERE task_id=tasks.id) FROM tasks WHERE id=? AND owner_id=? AND (? IS NULL OR ? BETWEEN date AND COALESCE(end_date,date))").bind(id, date ?? task.date, Number(date !== null), text(input.title, "하위 할 일", 240), 0, now, now, task.id, user.userId, date, date).run();
+      result = await db.prepare("INSERT INTO task_subtasks (id,task_id,date,scheduled,title,done,created_at,updated_at,sort_order) SELECT ?,id,?,?,?,?,?,?,(SELECT COALESCE(MAX(sort_order),0)+1 FROM (SELECT sort_order FROM task_subtasks WHERE task_id=tasks.id UNION ALL SELECT sort_order FROM task_backlog WHERE task_id=tasks.id)) FROM tasks WHERE id=? AND owner_id=? AND (? IS NULL OR ? BETWEEN date AND COALESCE(end_date,date))").bind(id, date ?? task.date, Number(date !== null), text(input.title, "하위 할 일", 240), 0, now, now, task.id, user.userId, date, date).run();
     } else {
       const fields = ["updated_at=?"];
       const values: (string | number)[] = [now];

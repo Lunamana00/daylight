@@ -19,11 +19,13 @@ function moduleURL(path, imports = {}) {
 const coreURL = new URL('../lib/planner-core.ts', import.meta.url).href;
 const backlogURL = moduleURL('../components/planner-backlog.tsx', { '../lib/planner-core': coreURL });
 const { PlannerBacklogRow } = await import(backlogURL);
-const { PlannerTask, PlannerDailySubtask } = await import(moduleURL('../components/planner-task.tsx', { '../lib/planner-core': coreURL, './planner-backlog': backlogURL }));
+const sortableURL = moduleURL('../components/planner-sortable-list.tsx');
+const { PlannerSortableList } = await import(sortableURL);
+const { PlannerTask, PlannerDailySubtask } = await import(moduleURL('../components/planner-task.tsx', { '../lib/planner-core': coreURL, './planner-backlog': backlogURL, './planner-sortable-list': sortableURL }));
 const { changeWork, readWorkCatalog, readWorkDetail } = await import(moduleURL('../lib/work-log.ts', { './planner-core': coreURL, './work-log-types': moduleURL('../lib/work-log-types.ts') }));
 const task = {
   id: 'period', ownerId: 'alice', title: '강화학습 논문 발표', date: '2026-11-11', endDate: '2026-11-20',
-  done: 0, important: 0, subtasks: [], projectId: null, projectHue: null,
+  done: 0, important: 0, sortOrder: 1, subtasks: [], projectId: null, projectHue: null,
 };
 const props = {
   task, projects: [], date: task.date, busy: false, readOnly: false, draggedTask: null,
@@ -75,22 +77,25 @@ for (const test of [
 console.log('Task shortcut checks passed: Command Enter, newlines, Korean composition, held keys, and submission guards.');
 
 assert.ok(catalogRenderer);
-const createCatalogRenderer = new Function('backlog', 'catalog', 'catalogError', 'taskRow', 'PlannerBacklogRow', 'createElement', 'Fragment', 'date', 'busy', 'mutate', 'removeBacklog',
+const createCatalogRenderer = new Function('backlog', 'catalog', 'catalogError', 'taskRow', 'PlannerBacklogRow', 'createElement', 'Fragment', 'date', 'busy', 'mutate', 'removeBacklog', 'PlannerSortableList', 'setDragging',
   ts.transpileModule(catalogRenderer, { compilerOptions: { target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.React, jsxFactory: 'createElement', jsxFragmentFactory: 'Fragment' } }).outputText + '\nreturn catalogRows;');
 const renderCatalog = (tasks, backlog) => renderToStaticMarkup(createCatalogRenderer(
-  backlog, tasks, '', value => createElement('li', { key: value.id }, value.title), PlannerBacklogRow, createElement, Fragment, task.date, false, async () => true, () => {},
+  backlog, tasks, '', value => createElement('li', { key: value.id }, value.title), PlannerBacklogRow, createElement, Fragment, task.date, false, async () => true, () => {}, PlannerSortableList, () => {},
 )(tasks, '작업 없음'));
-const undatedWork = { id: 'undated-work', title: '날짜 없는 작업', taskId: null, taskTitle: null, taskDate: null, taskEndDate: null, projectId: null, projectTitle: null, projectHue: null };
+const undatedWork = { id: 'undated-work', title: '날짜 없는 작업', sortOrder: 2, taskId: null, taskTitle: null, taskDate: null, taskEndDate: null, projectId: null, projectTitle: null, projectHue: null };
 const mixedCatalog = renderCatalog([task, { ...task, id: 'finished', title: '끝낸 작업', done: 1 }], [
   undatedWork,
   { ...undatedWork, id: 'nested-draft', taskId: task.id, title: '부모 안의 세부 계획' },
   { ...undatedWork, id: 'nested-child', taskId: task.id, subtask: 1, title: '부모 안의 하위 할 일' },
 ]);
-assert.match(mixedCatalog, /class="task-list task-work-list">[\s\S]*강화학습 논문 발표[\s\S]*날짜 없는 작업[\s\S]*<\/ul><details class="completed-work">/, 'Dated and undated work share one list before completed work');
+assert.match(mixedCatalog, /class="sortable-list task-list task-work-list">[\s\S]*강화학습 논문 발표[\s\S]*날짜 없는 작업[\s\S]*<\/ul><details class="completed-work">/, 'Dated and undated work share one list before completed work');
 assert.doesNotMatch(mixedCatalog, /부모 안의/, 'Undated children stay with their parent instead of appearing as separate work');
 assert.match(mixedCatalog, /aria-label="날짜 없는 작업 날짜 지정"/, 'Undated work keeps its scheduling control');
 assert.match(renderCatalog([], []), /작업 없음/);
 assert.doesNotMatch(renderCatalog([], [undatedWork]), /작업 없음/, 'An undated-only list is not empty');
+assert.match(renderCatalog([task], [{ ...undatedWork, sortOrder: 0 }]), /날짜 없는 작업[\s\S]*강화학습 논문 발표/, 'A saved undated position can precede dated work');
+assert.match(mixedCatalog, /data-sort-handle="true" draggable="true"/, 'Undated work has an enabled drag handle');
+assert.doesNotMatch(render({ readOnly: true }), /data-sort-handle/, 'Other people cannot drag this task');
 console.log('Work list checks passed: undated work in the main list, parent-only subtasks, and completed work below.');
 
 const taskSource = ts.createSourceFile('planner-task.tsx', readFileSync(new URL('../components/planner-task.tsx', import.meta.url), 'utf8'), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
@@ -236,5 +241,63 @@ assert.equal(sqlite.prepare('SELECT count(*) AS n FROM work_github_versions').ge
 assert.equal((await readBacklog(db, owner)).find(item => item.id === remaining.id).projectId, null, 'Project deletion keeps and unlinks undated work');
 await change(db, owner, { op: 'backlog.delete', id: remaining.id });
 assert.equal((await readBacklog(db, owner)).length, 0);
-sqlite.close();
 console.log('Task checks passed: collapse controls, private undated work, date assignment, project deletion with records/files preserved, and completed ordering.');
+
+const sortOwner = { userId: 'sort-owner', email: 'sort@example.test' };
+const sortOther = { userId: 'sort-other', email: 'sort-other@example.test' };
+const periodA = await change(db, sortOwner, { op: 'task.add', date: '2045-01-01', endDate: '2045-01-07', title: 'Period A' });
+const periodB = await change(db, sortOwner, { op: 'task.add', date: '2046-01-01', endDate: '2046-01-07', title: 'Period B' });
+const undatedA = await change(db, sortOwner, { op: 'backlog.add', title: 'Undated A' });
+const undatedB = await change(db, sortOwner, { op: 'backlog.add', title: 'Undated B' });
+const rootOrder = async () => [...await readTaskCatalog(db, sortOwner), ...(await readBacklog(db, sortOwner)).filter(item => !item.taskId)]
+  .sort((a, b) => (a.done ?? 0) - (b.done ?? 0) || a.sortOrder - b.sortOrder).map(item => item.id);
+await change(db, sortOwner, { op: 'task.move', scope: 'all', id: undatedA.id, targetId: periodA.id, position: 'before' });
+await change(db, sortOwner, { op: 'task.move', scope: 'all', id: periodB.id, targetId: undatedA.id, position: 'after' });
+assert.deepEqual(await rootOrder(), [undatedA.id, periodB.id, periodA.id, undatedB.id], 'Different dates and undated work share a persistent order');
+const appended = await change(db, sortOwner, { op: 'task.add', date: '2045-01-01', title: 'New work' });
+assert.deepEqual(await rootOrder(), [undatedA.id, periodB.id, periodA.id, undatedB.id, appended.id], 'New dated work follows existing undated work');
+await change(db, sortOwner, { op: 'backlog.schedule', id: undatedA.id, date: '2045-01-01' });
+assert.deepEqual(await rootOrder(), [undatedA.id, periodB.id, periodA.id, undatedB.id, appended.id], 'Assigning a date keeps the saved position');
+const sortChildA = await change(db, sortOwner, { op: 'subtask.add', taskId: periodA.id, date: '2045-01-01', title: 'Dated child' });
+const sortChildB = await change(db, sortOwner, { op: 'backlog.add', taskId: periodA.id, title: 'Undated child' });
+const sortChildC = await change(db, sortOwner, { op: 'subtask.add', taskId: periodA.id, date: '2045-01-02', title: 'Later child' });
+const childOrder = async () => [...(await readTaskCatalog(db, sortOwner)).find(item => item.id === periodA.id).subtasks, ...(await readBacklog(db, sortOwner)).filter(item => item.taskId === periodA.id && !item.subtask)]
+  .sort((a, b) => (a.done ?? 0) - (b.done ?? 0) || a.sortOrder - b.sortOrder).map(item => item.id);
+await change(db, sortOwner, { op: 'subtask.move', scope: 'all', id: sortChildB.id, targetId: sortChildA.id, position: 'before' });
+assert.deepEqual(await childOrder(), [sortChildB.id, sortChildA.id, sortChildC.id], 'Undated children can move among dated siblings');
+await change(db, sortOwner, { op: 'subtask.move', scope: 'all', id: sortChildC.id, targetId: sortChildA.id, position: 'before' });
+assert.deepEqual(await childOrder(), [sortChildB.id, sortChildC.id, sortChildA.id]);
+const sortParent = (await readTaskCatalog(db, sortOwner)).find(item => item.id === periodA.id);
+assert.equal(sortParent.date, '2045-01-01');
+assert.equal(sortParent.endDate, '2045-01-07');
+assert.equal(sortParent.subtasks.find(item => item.id === sortChildC.id).date, '2045-01-02', 'Dragging changes order, not the schedule');
+await change(db, sortOwner, { op: 'backlog.schedule', id: sortChildB.id, date: '2045-01-01' });
+assert.deepEqual(await childOrder(), [sortChildB.id, sortChildC.id, sortChildA.id]);
+assert.deepEqual(widgetPlan(await readDay(db, sortOwner, '2045-01-01')).tasks.map(item => item.id), [undatedA.id, sortChildB.id, sortChildA.id, appended.id], 'Widget receives the saved daily task and subtask order');
+await change(db, sortOwner, { op: 'subtask.patch', id: sortChildB.id, done: true });
+assert.deepEqual(await childOrder(), [sortChildC.id, sortChildA.id, sortChildB.id], 'Completion still moves a child below unfinished work');
+await assert.rejects(change(db, sortOwner, { op: 'subtask.move', scope: 'all', id: sortChildB.id, targetId: sortChildA.id }), error => error.status === 409);
+const otherParentChild = await change(db, sortOwner, { op: 'backlog.add', taskId: periodB.id, title: 'Another parent' });
+await assert.rejects(change(db, sortOwner, { op: 'subtask.move', scope: 'all', id: sortChildA.id, targetId: otherParentChild.id }), error => error.status === 403);
+const otherWork = await change(db, sortOther, { op: 'backlog.add', title: 'Other owner' });
+for (const [id, targetId] of [[otherWork.id, undatedB.id], [undatedB.id, otherWork.id]]) {
+  await assert.rejects(change(db, sortOwner, { op: 'task.move', scope: 'all', id, targetId }), error => error.status === 403);
+}
+await assert.rejects(change(db, sortOwner, { op: 'task.move', scope: 'invalid', id: undatedB.id, targetId: periodA.id }), error => error.status === 400);
+console.log('Unified order checks passed: cross-date tasks, undated work, siblings, scheduling, widget order, completion and owner-only moves.');
+sqlite.close();
+
+const beforeOrder = new DatabaseSync(':memory:');
+for (const name of readdirSync(new URL('../drizzle/', import.meta.url)).filter(name => name.endsWith('.sql') && name < '0012_backlog_order.sql').sort()) beforeOrder.exec(readFileSync(new URL('../drizzle/' + name, import.meta.url), 'utf8'));
+beforeOrder.exec(`INSERT INTO members VALUES ('owner','Owner','owner@example.test','2045-01-01');
+  INSERT INTO tasks (id,owner_id,date,title,sort_order,created_at,updated_at) VALUES ('parent','owner','2045-01-01','Parent',7,'2045-01-01','2045-01-01');
+  INSERT INTO task_subtasks (id,task_id,date,title,sort_order,created_at,updated_at) VALUES ('child','parent','2045-01-01','Child',4,'2045-01-01','2045-01-01');
+  INSERT INTO task_backlog (id,owner_id,task_id,title,created_at,updated_at) VALUES
+    ('root-draft','owner',NULL,'Root draft','2045-01-01','2045-01-01'),
+    ('child-draft','owner','parent','Child draft','2045-01-01','2045-01-01');`);
+const oldDrafts = beforeOrder.prepare('SELECT id,owner_id,task_id,title,created_at,updated_at FROM task_backlog ORDER BY id').all();
+beforeOrder.exec(readFileSync(new URL('../drizzle/0012_backlog_order.sql', import.meta.url), 'utf8'));
+assert.deepEqual(beforeOrder.prepare('SELECT id,owner_id,task_id,title,created_at,updated_at FROM task_backlog ORDER BY id').all(), oldDrafts, 'The order migration keeps existing drafts unchanged');
+assert.deepEqual(beforeOrder.prepare('SELECT id,sort_order FROM task_backlog ORDER BY id').all().map(row => [row.id, row.sort_order]), [['child-draft', 5], ['root-draft', 8]], 'Existing drafts keep their place after existing tasks and children');
+beforeOrder.close();
+console.log('Backlog order migration checks passed.');

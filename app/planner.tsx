@@ -7,6 +7,7 @@ import type { BacklogItem, DayData, Subtask, Task } from "../lib/planner-core";
 import { PlannerCalendar } from "../components/planner-calendar";
 import { PlannerDailySubtask, PlannerTask } from "../components/planner-task";
 import { PlannerBacklogRow } from "../components/planner-backlog";
+import { PlannerSortableList } from "../components/planner-sortable-list";
 import { WorkLog } from "../components/work-log";
 
 type View = "mine" | "together" | "work";
@@ -46,7 +47,7 @@ export default function Planner({ googleLogin = false }: { googleLogin?: boolean
   const [inviteError, setInviteError] = useState("");
   const [inviteMessage, setInviteMessage] = useState("");
   const [busy, setBusy] = useState(false);
-  const [draggedTask, setDraggedTask] = useState<Pick<Task, "id" | "done" | "date" | "endDate"> | null>(null);
+  const [dragging, setDragging] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
   const [toast, setToast] = useState("");
@@ -100,11 +101,11 @@ export default function Planner({ googleLogin = false }: { googleLogin?: boolean
     return () => { active = false; };
   }, [view, data]);
   useEffect(() => {
-    const refresh = () => { if (!document.hidden && !busy && !draggedTask) void load(dateRef.current); };
+    const refresh = () => { if (!document.hidden && !busy && !dragging) void load(dateRef.current); };
     const timer = setInterval(refresh, 30_000);
     window.addEventListener("focus", refresh);
     return () => { clearInterval(timer); window.removeEventListener("focus", refresh); };
-  }, [busy, draggedTask, load]);
+  }, [busy, dragging, load]);
   useEffect(() => {
     if (!toast) return;
     const timer = setTimeout(() => setToast(""), 3500);
@@ -193,11 +194,11 @@ export default function Planner({ googleLogin = false }: { googleLogin?: boolean
     setDeleteTask(parent); setDeleteChild(child ?? null); setDeleteBacklog(null); setModal("delete");
   }
   function removeBacklog(item: BacklogItem) { setDeleteBacklog(item); setDeleteTask(null); setDeleteChild(null); setModal("delete"); }
-  function taskRow(task: Task, { readOnly = false, managePeriod = false, grouped = false, order = myTasks }: { readOnly?: boolean; managePeriod?: boolean; grouped?: boolean; order?: Task[] } = {}) {
+  function taskRow(task: Task, { readOnly = false, managePeriod = false, grouped = false, order = myTasks, orderScope = "day" }: { readOnly?: boolean; managePeriod?: boolean; grouped?: boolean; order?: Array<Task | BacklogItem>; orderScope?: "day" | "all" } = {}) {
     const rowDate = date >= task.date && date <= (task.endDate ?? task.date) ? date : task.date;
-    const ordered = order.filter(item => item.done === task.done && item.date <= rowDate && (item.endDate ?? item.date) >= rowDate);
+    const ordered = order.filter(item => (item.done ?? 0) === task.done && (orderScope === "all" || "date" in item && item.date <= rowDate && (item.endDate ?? item.date) >= rowDate));
     const index = ordered.findIndex(item => item.id === task.id);
-    return <PlannerTask key={`${rowDate}-${task.id}`} task={task} projects={data?.projects ?? []} date={rowDate} busy={busy} readOnly={readOnly} grouped={grouped} backlog={readOnly ? [] : backlog.filter(item => item.taskId === task.id && !item.subtask)} onDeleteBacklog={removeBacklog} showDate={grouped || order === ownCatalog} reorderable={!managePeriod} initialEditing={managePeriod && !calendarChildId} initialChildId={managePeriod ? calendarChildId : undefined} previousTaskId={ordered[index - 1]?.id} nextTaskId={ordered[index + 1]?.id} draggedTask={draggedTask} onDragStart={() => setDraggedTask({ id: task.id, done: task.done, date: task.date, endDate: task.endDate })} onDragEnd={() => setDraggedTask(null)} onChange={async (input, message) => {
+    return <PlannerTask key={`${rowDate}-${task.id}`} task={task} projects={data?.projects ?? []} date={rowDate} busy={busy} readOnly={readOnly} grouped={grouped} backlog={readOnly ? [] : backlog.filter(item => item.taskId === task.id && !item.subtask)} onDeleteBacklog={removeBacklog} showDate={grouped || orderScope === "all"} reorderable={!managePeriod} orderScope={orderScope} initialEditing={managePeriod && !calendarChildId} initialChildId={managePeriod ? calendarChildId : undefined} previousTaskId={ordered[index - 1]?.id} nextTaskId={ordered[index + 1]?.id} onDraggingChange={setDragging} onChange={async (input, message) => {
       const saved = await mutate(input, message);
       if (saved && managePeriod && input.op === "task.patch" && typeof input.date === "string") selectDate(input.date);
       return saved;
@@ -205,13 +206,16 @@ export default function Planner({ googleLogin = false }: { googleLogin?: boolean
   }
 
   function catalogRows(tasks: Task[], empty: string) {
-    const active = tasks.filter(task => !task.done), finished = tasks.filter(task => task.done);
-    const undated = backlog.filter(item => !item.taskId);
-    const row = (task: Task) => taskRow(task, { order: tasks, grouped: Boolean(task.endDate && task.endDate > task.date) || task.subtasks.length > 0 || Boolean(task.unscheduledCount) });
+    const ordered = [...tasks, ...backlog.filter(item => !item.taskId)].sort((a, b) => a.sortOrder - b.sortOrder);
+    const active = ordered.filter(item => !item.done), finished = ordered.filter(item => item.done);
+    const row = (item: Task | BacklogItem) => "ownerId" in item
+      ? taskRow(item, { order: ordered, orderScope: "all", grouped: Boolean(item.endDate && item.endDate > item.date) || item.subtasks.length > 0 || Boolean(item.unscheduledCount) })
+      : <PlannerBacklogRow key={item.id} item={item} date={date} busy={busy} onChange={mutate} onDelete={removeBacklog} />;
+    const move = (id: string, targetId: string, position: "before" | "after") => mutate({ op: "task.move", id, targetId, position, scope: "all" }, "순서를 변경했어요.");
     return <>{catalogError && <p className="error-banner" role="alert">{catalogError}<button onClick={() => void load(date, true)}>다시 시도</button></p>}
       {catalog === null ? <p className="empty-tasks" role="status">{catalogError ? "작업을 불러오지 못했어요." : "작업 불러오는 중…"}</p> : <>
-        {active.length || undated.length ? <ul className="task-list task-work-list">{active.map(row)}{undated.map(item => <PlannerBacklogRow key={item.id} item={item} date={date} busy={busy} onChange={mutate} onDelete={removeBacklog} />)}</ul> : <p className="empty-tasks">{empty}</p>}
-        {finished.length > 0 && <details className="completed-work"><summary>완료한 작업 <span>{finished.length}</span></summary><ul className="task-list task-work-list">{finished.map(row)}</ul></details>}
+        {active.length ? <PlannerSortableList className="task-list task-work-list" disabled={busy} onDraggingChange={setDragging} onMove={move}>{active.map(row)}</PlannerSortableList> : <p className="empty-tasks">{empty}</p>}
+        {finished.length > 0 && <details className="completed-work"><summary>완료한 작업 <span>{finished.length}</span></summary><PlannerSortableList className="task-list task-work-list" disabled={busy} onDraggingChange={setDragging} onMove={move}>{finished.map(row)}</PlannerSortableList></details>}
       </>}
     </>;
   }
@@ -219,9 +223,9 @@ export default function Planner({ googleLogin = false }: { googleLogin?: boolean
     <div className="task-pane-heading"><h3>{date === today() ? "오늘 할 일" : `${shortDate(date)} 할 일`}</h3><span><strong>{completed}</strong> / {dailyItems.length} 완료</span></div>
     <div className="task-progress"><span style={{ width: `${dailyItems.length ? completed / dailyItems.length * 100 : 0}%` }} /></div>
     <div className="task-filter" aria-label="할 일 필터">{[["all", "전체"], ["open", "미완료"], ["done", "완료"]].map(([key, label]) => <button key={key} className={filter === key ? "selected" : ""} onClick={() => setFilter(key)}>{label}{key === "done" && <span>{completed}</span>}</button>)}</div>
-    {dailyRows.length ? <ul className="task-list task-day-list">{dailyRows.map(({ task, item }) => item.subtask
+    {dailyRows.length ? <PlannerSortableList className="task-list task-day-list" disabled={busy} onDraggingChange={setDragging} onMove={(id, targetId, position) => mutate({ op: myTasks.some(task => task.id === id) ? "task.move" : "subtask.move", id, targetId, position, date }, "순서를 변경했어요.")}>{dailyRows.map(({ task, item }) => item.subtask
       ? <PlannerDailySubtask key={item.id} task={task} child={task.subtasks.find(child => child.id === item.id)!} date={date} busy={busy} onChange={mutate} onOpenTask={openTask} onDelete={removeTask} />
-      : taskRow(task, { order: myTasks.filter(item => !item.subtasks.length) }))}</ul>
+      : taskRow(task, { order: myTasks.filter(item => !item.subtasks.length) }))}</PlannerSortableList>
       : <p className="empty-tasks">{myTasks.length ? filter === "done" ? "완료한 할 일 없음" : "남은 할 일 없음" : "오늘 할 일 없음"}</p>}
   </section>;
   const composer = <form className="task-composer" onKeyDown={event => {
@@ -268,12 +272,12 @@ export default function Planner({ googleLogin = false }: { googleLogin?: boolean
         {view !== "work" && (!data ? (!error && <div className="loading-state" role="status"><LoaderCircle size={23} className="spin" /><p>불러오는 중…</p></div>) : <div className="content-grid">
           <div className="primary-column">
             {view === "mine" && (data.date === date ? <section className={`card task-workspace layout-${taskLayout}`} aria-label="내 할 일 작업 공간">
-              <div className="task-workspace-heading"><h2>내 할 일</h2><label className="task-layout-picker"><span>보기</span><select aria-label="할 일 화면 구성" value={taskLayout} disabled={busy || Boolean(draggedTask)} onChange={event => {
+              <div className="task-workspace-heading"><h2>내 할 일</h2><label className="task-layout-picker"><span>보기</span><select aria-label="할 일 화면 구성" value={taskLayout} disabled={busy || dragging} onChange={event => {
                 const value = event.target.value === "list" ? "list" : "split";
                 setTaskLayout(value);
                 try { localStorage.setItem("daylight.task-layout.v1", value); } catch { /* Keep the current choice in memory. */ }
               }}><option value="split">작업·오늘 분할형</option><option value="list">목록 전환형</option></select></label></div>
-              {taskLayout === "list" && <div className="task-scope-switch" role="group" aria-label="작업 표시 범위"><button className={taskScope === "day" ? "selected" : ""} aria-pressed={taskScope === "day"} disabled={busy || Boolean(draggedTask)} onClick={() => setTaskScope("day")}>{date === today() ? "오늘" : "선택한 날"}</button><button className={taskScope === "all" ? "selected" : ""} aria-pressed={taskScope === "all"} disabled={busy || Boolean(draggedTask)} onClick={() => setTaskScope("all")}>전체 작업</button></div>}
+              {taskLayout === "list" && <div className="task-scope-switch" role="group" aria-label="작업 표시 범위"><button className={taskScope === "day" ? "selected" : ""} aria-pressed={taskScope === "day"} disabled={busy || dragging} onClick={() => setTaskScope("day")}>{date === today() ? "오늘" : "선택한 날"}</button><button className={taskScope === "all" ? "selected" : ""} aria-pressed={taskScope === "all"} disabled={busy || dragging} onClick={() => setTaskScope("all")}>전체 작업</button></div>}
               {taskLayout === "split" ? <div className="task-split-panes"><section className="task-group-pane" aria-label="작업 관리"><div className="task-pane-heading"><h3>진행 중인 일</h3></div>{catalogRows(groupTasks, "진행 중인 일이 없어요.")}</section>{dailyPanel}</div> : taskScope === "day" ? dailyPanel : <section className="task-all-pane" aria-label="전체 작업">{catalogRows(ownCatalog, "아직 등록한 작업이 없어요.")}</section>}
               {composer}
             </section> : <p className="calendar-status" role="status">{error ? "이 날짜의 할 일을 불러오지 못했어요." : "할 일 불러오는 중…"}</p>)}
@@ -282,7 +286,7 @@ export default function Planner({ googleLogin = false }: { googleLogin?: boolean
               const tasks = data.tasks.filter(task => task.ownerId === member.id && dailyTaskItems([task], date).length > 0);
               const items = dailyTaskItems(tasks, date);
               const count = items.filter(task => task.done).length;
-              return <section key={member.id} className="card member-card"><div className="member-card-heading"><Avatar name={member.name} index={i} /><div><h3>{member.name}{member.id === data.me.id && <span className="me-label">나</span>}</h3><span>{items.length ? `${items.length - count}개 남음 · ${count}개 완료` : "오늘 할 일 없음"}</span></div><span className="member-percent">{items.length ? Math.round(count / items.length * 100) : 0}<small>%</small></span></div>{tasks.length > 0 && <><div className="task-progress"><span style={{ width: `${items.length ? count / items.length * 100 : 0}%` }} /></div><ul className="task-list">{tasks.map(task => taskRow(task, { readOnly: task.ownerId !== data.me.id }))}</ul></>}</section>;
+              return <section key={member.id} className="card member-card"><div className="member-card-heading"><Avatar name={member.name} index={i} /><div><h3>{member.name}{member.id === data.me.id && <span className="me-label">나</span>}</h3><span>{items.length ? `${items.length - count}개 남음 · ${count}개 완료` : "오늘 할 일 없음"}</span></div><span className="member-percent">{items.length ? Math.round(count / items.length * 100) : 0}<small>%</small></span></div>{tasks.length > 0 && <><div className="task-progress"><span style={{ width: `${items.length ? count / items.length * 100 : 0}%` }} /></div><PlannerSortableList className="task-list" disabled={busy || member.id !== data.me.id} onDraggingChange={setDragging} onMove={(id, targetId, position) => mutate({ op: "task.move", id, targetId, position, date }, "순서를 변경했어요.")}>{tasks.map(task => taskRow(task, { readOnly: task.ownerId !== data.me.id }))}</PlannerSortableList></>}</section>;
             })}</>}
           </div>
         </div>)}

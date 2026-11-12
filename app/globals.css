@@ -113,9 +113,9 @@
 .subtask-done{color:var(--muted);text-decoration:line-through}
 .subtask-row time{font-size:10px;white-space:nowrap;color:#666b75}
 .subtask-row .icon-button{width:23px;height:23px}
-.task-row .task-order-handle{width:20px;flex-shrink:0;cursor:grab;color:var(--muted)}
-.task-row .task-order-handle:active{cursor:grabbing}
-.task-item{position:relative}
+.task-order-handle{width:20px;flex-shrink:0;cursor:grab;color:var(--muted);touch-action:none;user-select:none}
+.task-order-handle:active{cursor:grabbing}
+.task-item,.sortable-list>li{position:relative}
 .task-drag-source{opacity:.3;border-style:dashed!important;background:var(--accent-soft)!important}
 .task-drag-preview{position:fixed!important;z-index:10000;pointer-events:none;list-style:none;margin:0!important;opacity:1!important;background:var(--surface)!important;border-color:var(--accent)!important;box-shadow:0 12px 32px #20283d30,0 2px 8px #20283d15}
 .task-drop-before::before,.task-drop-after::after{content:"";position:absolute;left:-3px;right:-3px;height:3px;border-radius:3px;background:var(--accent);box-shadow:0 0 0 2px var(--surface);pointer-events:none;z-index:2}
@@ -435,11 +435,9 @@ input:focus-visible,textarea:focus-visible,select:focus-visible{outline:2px soli
 .task-period-fields[aria-disabled="true"]{color:#989eaa}
 .subtask-add-actions{margin-left:auto;flex-wrap:nowrap}
 .subtask-add-actions>.text-button{padding:6px 12px;min-height:32px;border-radius:5px;background:var(--accent);color:#fff}
-.subtask-backlog{padding-top:12px}
 .task-scope-switch{flex-wrap:wrap}
-.task-work-list>.backlog-row{padding:15px 0 15px 28px}
+.task-work-list>.backlog-row{padding:15px 0;gap:8px}
 .task-work-list>.backlog-row .backlog-content{font-size:13px}
-.backlog-list{list-style:none;margin:0;padding:0}
 .backlog-row{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--border)}
 .backlog-row:last-child{border-bottom:0}
 .backlog-content{display:flex;flex:1;min-width:0;flex-direction:column;gap:4px;font-size:12px;line-height:1.6;overflow-wrap:anywhere}
@@ -451,8 +449,8 @@ input:focus-visible,textarea:focus-visible,select:focus-visible{outline:2px soli
 .backlog-edit>input{flex:1;min-width:90px}
 .backlog-edit input{background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:7px;font:inherit}
 .backlog-edit>label{display:flex;align-items:center;gap:8px;color:var(--muted)}
-.subtask-backlog .backlog-row{padding:10px 12px;margin-top:6px;background:#fafafb;border:1px dashed var(--border);border-radius:7px}
-.daily-task-project{display:flex;align-items:center;gap:5px;font-size:10px;color:var(--muted);padding:0 0 5px 25px}
+.subtasks .backlog-row{margin-top:6px;background:#fafafb;border:1px solid var(--border);border-radius:7px}
+.daily-task-project{display:flex;align-items:center;gap:5px;font-size:10px;color:var(--muted);padding:0 0 5px 53px}
 .daily-parent-link{display:block;text-align:left;font-size:11px;color:var(--muted);line-height:1.5;padding:2px 0;overflow-wrap:anywhere}
 .daily-parent-link:hover{color:var(--accent);text-decoration:underline}
 .task-workspace .daily-subtask-row .task-check{margin-top:4px}
