@@ -73,23 +73,27 @@ for (const test of [
 console.log('Task shortcut checks passed: Command Enter, newlines, Korean composition, held keys, and submission guards.');
 
 const taskSource = ts.createSourceFile('planner-task.tsx', readFileSync(new URL('../components/planner-task.tsx', import.meta.url), 'utf8'), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
-let scheduleChange;
+let scheduleChange, editScheduleChange;
 function findScheduleControl(node) {
-  if (ts.isJsxOpeningElement(node) && node.tagName.getText(taskSource) === 'select' && node.attributes.properties.some(attr => ts.isJsxAttribute(attr) && attr.name.getText(taskSource) === 'aria-label' && attr.initializer?.text === '하위 할 일 일정')) {
-    scheduleChange = node.attributes.properties.find(attr => ts.isJsxAttribute(attr) && attr.name.getText(taskSource) === 'onChange')?.initializer?.expression?.getText(taskSource);
+  if (ts.isJsxSelfClosingElement(node) && node.tagName.getText(taskSource) === 'input') {
+    const label = node.attributes.properties.find(attr => ts.isJsxAttribute(attr) && attr.name.getText(taskSource) === 'aria-label')?.initializer?.text;
+    const handler = node.attributes.properties.find(attr => ts.isJsxAttribute(attr) && attr.name.getText(taskSource) === 'onChange')?.initializer?.expression?.getText(taskSource);
+    if (label === '하위 할 일 날짜 지정') scheduleChange = handler;
+    if (label === '기존 하위 할 일 날짜 지정') editScheduleChange = handler;
   }
   ts.forEachChild(node, findScheduleControl);
 }
 findScheduleControl(taskSource);
-assert.ok(scheduleChange, 'Long-task subtasks have an explicit undated option');
-const selectSchedule = new Function('setChildDate', 'task', 'date', `return (${scheduleChange});`);
-for (const [value, currentDate, expected] of [
-  ['unscheduled', '2026-11-12', ''], ['scheduled', '2026-11-12', '2026-11-12'],
-  ['scheduled', '2026-11-01', task.date], ['scheduled', '2026-12-01', task.endDate],
-]) {
-  let selectedDate;
-  selectSchedule(value => { selectedDate = value; }, task, currentDate)({ target: { value } });
-  assert.equal(selectedDate, expected, 'Scheduling is optional and stays inside the parent period');
+assert.ok(scheduleChange && editScheduleChange, 'Subtask creation and editing both use date checkboxes');
+const selectSchedule = new Function('setChildScheduled', `return (${scheduleChange});`);
+const editSchedule = new Function('setEditChild', 'editChild', `return (${editScheduleChange});`);
+for (const checked of [true, false]) {
+  let selected, edited;
+  selectSchedule(value => { selected = value; })({ target: { checked } });
+  assert.equal(selected, checked, 'Checking enables scheduling and unchecking disables it');
+  const draft = { id: 'child', title: 'Keep title', date: '2026-11-15', done: 1, scheduled: !checked };
+  editSchedule(value => { edited = value; }, draft)({ target: { checked } });
+  assert.deepEqual(edited, { ...draft, scheduled: checked }, 'Toggling the checkbox keeps the selected date and task state');
 }
 
 const grouped = render({ grouped: true });
@@ -115,11 +119,15 @@ assert.doesNotMatch(childRow, /다른 날짜의 하위 할 일/, 'The daily row 
 assert.doesNotMatch(childRow, />0<\/button>/, 'An unchecked checkbox does not render the numeric false value');
 assert.match(render({ task: parent, initialChildId: 'today-child' }), /aria-label="하위 할 일 제목" value="오늘의 하위 할 일"/, 'A daily child opens directly in edit mode');
 const existingChildEditor = render({ task: parent, initialChildId: 'today-child' });
-assert.match(existingChildEditor, /aria-label="기존 하위 할 일 일정"/);
-assert.match(existingChildEditor, /value="unscheduled">날짜 미정/);
+const dateControl = html => html.match(/<input\b[^>]*aria-label="하위 할 일 날짜"[^>]*>/)?.[0];
+const scheduleCheckbox = html => html.match(/<input\b[^>]*aria-label="기존 하위 할 일 날짜 지정"[^>]*>/)?.[0];
+assert.match(scheduleCheckbox(existingChildEditor), /checked=""/);
+assert.ok(dateControl(existingChildEditor));
+assert.doesNotMatch(dateControl(existingChildEditor), /disabled=""/);
 const undatedEditor = render({ task: { ...parent, subtasks: [{ ...children[0], date: null }] }, initialChildId: 'today-child' });
-assert.match(undatedEditor, /value="unscheduled" selected="">날짜 미정/);
-assert.doesNotMatch(undatedEditor, /aria-label="하위 할 일 날짜"/, 'An undated existing item hides its date input');
+assert.doesNotMatch(scheduleCheckbox(undatedEditor), /checked=""/);
+assert.match(dateControl(undatedEditor), /disabled=""/, 'An undated existing item keeps its date field visible and disabled');
+assert.match(dateControl(undatedEditor), /value="2026-11-11"/);
 assert.match(render({ task: { ...task, endDate: null }, showDate: true }), /<time class="task-period" dateTime="2026-11-11">/, 'The full list identifies a one-day task date');
 
 const sqlite = new DatabaseSync(':memory:'); sqlite.exec('PRAGMA foreign_keys=ON');
