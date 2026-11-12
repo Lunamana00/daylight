@@ -133,6 +133,14 @@ const children = [
 ];
 const parent = { ...task, subtasks: children, projectTitle: '연구 프로젝트', projectId: 'project' };
 const undatedChild = { id: 'undated-child', title: '날짜 미정 세부 작업', taskId: task.id, taskTitle: task.title, taskDate: task.date, taskEndDate: task.endDate, projectId: null, projectTitle: null, projectHue: null };
+for (const readOnly of [false, true]) {
+  const dailyParent = render({ task: { ...parent, subtasks: [...children, { ...children[0], id: 'unscheduled', title: '날짜 없는 하위 작업', date: null }] }, grouped: true, dailyOnly: true, readOnly, backlog: [undatedChild], onDeleteBacklog() {} });
+  assert.match(dailyParent, /오늘의 하위 할 일/);
+  assert.doesNotMatch(dailyParent, /다른 날짜의 하위 할 일|날짜 없는 하위 작업|날짜 미정 세부 작업/, 'The shared daily view excludes future and undated children for owners and viewers');
+  assert.match(dailyParent, /하위 할 일 <span>0 \/ 1<\/span>/, 'The daily parent count matches its visible children');
+  assert.doesNotMatch(dailyParent, /＋ 하위 할 일|aria-label="오늘의 하위 할 일 (위로|아래로) 이동"/);
+}
+assert.match(render({ task: parent, grouped: true }), /다른 날짜의 하위 할 일/, 'The work list still shows the full plan');
 const parentWithUndated = render({ task: { ...task, unscheduledCount: 1 }, grouped: true, backlog: [undatedChild], onDeleteBacklog() {} });
 assert.match(parentWithUndated, /날짜 미정 세부 작업/, 'An undated detail stays visible under its long-task parent');
 assert.match(parentWithUndated, /aria-label="날짜 미정 세부 작업 날짜 지정"/);

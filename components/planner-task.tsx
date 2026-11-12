@@ -15,6 +15,7 @@ type Props = {
   initialEditing?: boolean;
   initialChildId?: string;
   grouped?: boolean;
+  dailyOnly?: boolean;
   showDate?: boolean;
   backlog?: BacklogItem[];
   onDeleteBacklog?: (item: BacklogItem) => void;
@@ -25,7 +26,7 @@ type Props = {
 };
 const label = (date: string) => `${Number(date.slice(5, 7))}.${Number(date.slice(8))}`;
 
-export function PlannerTask({ task, projects, date, busy, readOnly, reorderable = true, orderScope = "day", initialEditing = false, initialChildId, grouped = false, showDate = false, backlog = [], onDeleteBacklog, previousTaskId, nextTaskId, onDraggingChange, onChange, onDelete, onOpenWorkLog }: Props) {
+export function PlannerTask({ task, projects, date, busy, readOnly, reorderable = true, orderScope = "day", initialEditing = false, initialChildId, grouped = false, dailyOnly = false, showDate = false, backlog = [], onDeleteBacklog, previousTaskId, nextTaskId, onDraggingChange, onChange, onDelete, onOpenWorkLog }: Props) {
   const [menu, setMenu] = useState(false);
   const [editing, setEditing] = useState(initialEditing && !readOnly);
   const [title, setTitle] = useState(task.title);
@@ -40,14 +41,14 @@ export function PlannerTask({ task, projects, date, busy, readOnly, reorderable 
     return child ? { ...child, date: child.date ?? defaultChildDate, scheduled: Boolean(child.date) } : null;
   });
   const [addingChild, setAddingChild] = useState(false);
-  const children = task.subtasks;
-  const childRows = [...children, ...(readOnly ? [] : backlog)].sort((a, b) => (a.done ?? 0) - (b.done ?? 0) || a.sortOrder - b.sortOrder);
-  const childCount = children.length + (task.unscheduledCount ?? 0);
+  const children = dailyOnly ? task.subtasks.filter(child => child.date === date) : task.subtasks;
+  const childRows = [...children, ...(readOnly || dailyOnly ? [] : backlog)].sort((a, b) => (a.done ?? 0) - (b.done ?? 0) || a.sortOrder - b.sortOrder);
+  const childCount = children.length + (dailyOnly ? 0 : task.unscheduledCount ?? 0);
   const completed = children.filter(child => child.done).length;
   const move = (targetId?: string) => targetId && onChange({ op: "task.move", id: task.id, targetId, date, scope: orderScope }, "순서를 변경했어요.");
   const startEditing = () => { setTitle(task.title); setStart(task.date); setEnd(task.endDate ?? task.date); setEditing(true); setMenu(false); };
   const startChildEditing = (child: Subtask) => setEditChild({ ...child, date: child.date ?? defaultChildDate, scheduled: Boolean(child.date) });
-  const childComposer = !readOnly && (addingChild ? <form className="subtask-form subtask-add" onSubmit={async event => {
+  const childComposer = !readOnly && !dailyOnly && (addingChild ? <form className="subtask-form subtask-add" onSubmit={async event => {
     event.preventDefault();
     if (await onChange({ op: childScheduled ? "subtask.add" : "backlog.add", taskId: task.id, title: childTitle, date: childScheduled ? childDate : undefined })) { setChildTitle(""); setAddingChild(false); }
   }}>
@@ -102,9 +103,9 @@ export function PlannerTask({ task, projects, date, busy, readOnly, reorderable 
         </div>
       </div>}
     </div>
-    {children.length + backlog.length > 0 ? <details className="subtasks" open>
+    {childRows.length > 0 ? <details className="subtasks" open>
       <summary>하위 할 일 <span>{completed} / {childCount}</span></summary>
-      <PlannerSortableList disabled={busy || readOnly} onDraggingChange={onDraggingChange} onMove={(id, targetId, position) => onChange({ op: "subtask.move", id, targetId, position, scope: "all" }, "순서를 변경했어요.")}>{childRows.map((child, index) => !("date" in child) ? onDeleteBacklog && <PlannerBacklogRow key={child.id} item={child} date={date} busy={busy} showParent={false} onChange={onChange} onDelete={onDeleteBacklog} /> : <li key={child.id} className={`subtask-row ${child.date === date ? "subtask-today" : ""}`} data-sort-id={child.id} data-sort-done={child.done}>
+      <PlannerSortableList disabled={busy || readOnly} onDraggingChange={onDraggingChange} onMove={(id, targetId, position) => onChange({ op: "subtask.move", id, targetId, position, scope: "all" }, "순서를 변경했어요.")}>{childRows.map(child => !("date" in child) ? onDeleteBacklog && <PlannerBacklogRow key={child.id} item={child} date={date} busy={busy} showParent={false} onChange={onChange} onDelete={onDeleteBacklog} /> : <li key={child.id} className={`subtask-row ${child.date === date ? "subtask-today" : ""}`} data-sort-id={child.id} data-sort-done={child.done}>
         {!readOnly && editChild?.id !== child.id && <button type="button" className="icon-button task-order-handle" data-sort-handle draggable={!busy} disabled={busy} aria-label={`${child.title} 순서 변경, 위아래 방향키로 이동`} title="드래그하거나 ↑ ↓ 키로 순서 변경"><GripVertical size={14} /></button>}
         <button className={`task-check ${child.done ? "checked" : ""}`} disabled={busy || readOnly} onClick={() => void onChange({ op: "subtask.patch", id: child.id, done: !child.done })} aria-label={`${child.title} ${child.done ? "완료 취소" : "완료"}`}>
           {child.done ? <Check size={12} strokeWidth={3} /> : null}
@@ -120,10 +121,6 @@ export function PlannerTask({ task, projects, date, busy, readOnly, reorderable 
           </div><div className="subtask-add-actions"><button className="text-button" disabled={busy}>저장</button><button type="button" className="icon-button" aria-label="수정 취소" disabled={busy} onClick={() => setEditChild(null)}><X size={13} /></button></div></div>
         </form> : <>
           <span className={`subtask-title ${child.done ? "subtask-done" : ""}`}>{child.title}</span>{readOnly ? child.date && <time dateTime={child.date}>{label(child.date)}</time> : <button className="text-button subtask-date-button" disabled={busy} aria-label={`${child.title} 날짜 변경`} onClick={() => startChildEditing(child)}>{child.date ? <time dateTime={child.date}>{label(child.date)}</time> : "날짜 미정"}</button>}
-          {!readOnly && <span className="subtask-order-actions">
-            <button className="icon-button" aria-label={`${child.title} 위로 이동`} title="위로 이동" disabled={busy || !childRows[index - 1] || (childRows[index - 1].done ?? 0) !== child.done} onClick={() => void onChange({ op: "subtask.move", id: child.id, targetId: childRows[index - 1].id, scope: "all" }, "순서를 변경했어요.")}><ArrowUp size={12} /></button>
-            <button className="icon-button" aria-label={`${child.title} 아래로 이동`} title="아래로 이동" disabled={busy || !childRows[index + 1] || (childRows[index + 1].done ?? 0) !== child.done} onClick={() => void onChange({ op: "subtask.move", id: child.id, targetId: childRows[index + 1].id, scope: "all" }, "순서를 변경했어요.")}><ArrowDown size={12} /></button>
-          </span>}
           {!readOnly && <><button className="icon-button" aria-label={`${child.title} 수정`} disabled={busy} onClick={() => startChildEditing(child)}><Pencil size={12} /></button><button className="icon-button" aria-label={`${child.title} 삭제`} disabled={busy} onClick={() => onDelete(task, child)}><Trash2 size={12} /></button></>}
         </>}
       </li>)}</PlannerSortableList>
@@ -132,12 +129,10 @@ export function PlannerTask({ task, projects, date, busy, readOnly, reorderable 
   </li>;
 }
 
-export function PlannerDailySubtask({ task, child, date, busy, onChange, onOpenTask, onDelete }: {
-  task: Task; child: Subtask; date: string; busy: boolean;
+export function PlannerDailySubtask({ task, child, busy, onChange, onOpenTask, onDelete }: {
+  task: Task; child: Subtask; busy: boolean;
   onChange: Props["onChange"]; onOpenTask: (task: Task, childId?: string) => void; onDelete: Props["onDelete"];
 }) {
-  const siblings = task.subtasks.filter(item => item.date === date && item.done === child.done);
-  const index = siblings.findIndex(item => item.id === child.id);
   return <li className={`task-item daily-subtask-row task-color ${task.projectId ? "" : "task-unassigned"}`} style={{ "--task-hue": taskHue(task) } as CSSProperties} data-sort-id={child.id} data-sort-done={child.done} data-sort-group={task.id}>
     {task.projectTitle && <div className="daily-task-project"><span className="project-color-dot" aria-hidden="true" />{task.projectTitle}</div>}
     <div className={`task-row ${child.done ? "is-done" : ""}`}>
@@ -145,7 +140,6 @@ export function PlannerDailySubtask({ task, child, date, busy, onChange, onOpenT
       <button className={`task-check ${child.done ? "checked" : ""}`} disabled={busy} aria-label={`${child.title} ${child.done ? "완료 취소" : "완료"}`} onClick={() => void onChange({ op: "subtask.patch", id: child.id, done: !child.done })}>{child.done ? <Check size={13} strokeWidth={3} /> : null}</button>
       <div className="task-content"><button className="task-title task-title-edit" disabled={busy} onClick={() => onOpenTask(task, child.id)}>{child.title}</button><button className="daily-parent-link" disabled={busy} onClick={() => onOpenTask(task)}>{task.title}</button></div>
       <div className="task-actions">
-        <span className="subtask-order-actions"><button className="icon-button" aria-label={`${child.title} 위로 이동`} disabled={busy || !siblings[index - 1]} onClick={() => void onChange({ op: "subtask.move", id: child.id, targetId: siblings[index - 1].id, date }, "순서를 변경했어요.")}><ArrowUp size={12} /></button><button className="icon-button" aria-label={`${child.title} 아래로 이동`} disabled={busy || !siblings[index + 1]} onClick={() => void onChange({ op: "subtask.move", id: child.id, targetId: siblings[index + 1].id, date }, "순서를 변경했어요.")}><ArrowDown size={12} /></button></span>
         <button className="icon-button" aria-label={`${child.title} 수정`} disabled={busy} onClick={() => onOpenTask(task, child.id)}><Pencil size={13} /></button><button className="icon-button" aria-label={`${child.title} 삭제`} disabled={busy} onClick={() => onDelete(task, child)}><Trash2 size={13} /></button>
       </div>
     </div>
