@@ -18,9 +18,9 @@ Set your own daily tasks. See what other people plan and complete.
 
 Select one or more calendars in **설정**. The server reads the selected calendars every five minutes. Use **지금 동기화** or the refresh button in the Mac widget to request an update. Failed imports keep the last saved events. Task records and saved event order remain unchanged.
 
-The Mac widget shows today’s tasks, including subtasks scheduled for today. The header shows the full completion count. Use **Edit Widget** to show or hide Google Calendar events.
+The Mac widget shows the current week. Use the extra-large size to see Monday through Sunday in columns. Medium and large sizes show a week strip and the selected day's details. Select a date to see its tasks and Google events. Titles wrap. Project and parent names appear above the task title. Use the page buttons when the items do not fit. The header shows today's full completion count. Today’s checkboxes change completion. Tasks on other dates open the web planner. Use **Edit Widget** to show or hide Google Calendar events.
 
-Download the [Mac installer](https://github.com/Lunamana00/daylight/releases/tag/v1.1.0-beta.1) and follow the [installation guide](docs/mac-install.md). The installer requires macOS 26 or later. It supports Apple Silicon and Intel. You do not need Xcode or a GitHub account. This beta uses a development signature. Apple has not notarized it.
+Download the [Mac installer](https://github.com/Lunamana00/daylight/releases/tag/v1.2.0-beta.1) and follow the [installation guide](docs/mac-install.md). The installer requires macOS 26 or later. It supports Apple Silicon and Intel. You do not need Xcode or a GitHub account. This beta uses a development signature. Apple has not notarized it.
 
 See [deployment instructions](deploy/README.md) for Google login, database setup, and source builds.
 

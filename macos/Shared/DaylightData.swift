@@ -26,6 +26,16 @@ enum Daylight {
         day.split(separator: "-").dropFirst().compactMap { Int($0) }.map(String.init).joined(separator: ".")
     }
 
+    static func weekday(_ day: String) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "ko_KR")
+        formatter.timeZone = TimeZone(secondsFromGMT: 0)
+        formatter.dateFormat = "yyyy-MM-dd"
+        guard let date = formatter.date(from: day) else { return "" }
+        formatter.dateFormat = "E"
+        return formatter.string(from: date)
+    }
+
     static func nextDay(after date: Date) -> Date {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(identifier: "Asia/Seoul")!
@@ -48,6 +58,20 @@ struct DaylightMilestone: Codable, Equatable {
     let date: String
 }
 
+struct DaylightCalendarEvent: Codable, Equatable, Identifiable {
+    let id: String
+    let title: String
+    var source: String? = nil
+}
+
+struct DaylightCalendarDay: Codable, Equatable, Identifiable {
+    let date: String
+    let tasks: [DaylightTask]
+    let events: [DaylightCalendarEvent]
+    var id: String { date }
+    var completed: Int { tasks.filter(\.done).count }
+}
+
 struct DaylightSnapshot: Codable, Equatable {
     let date: String
     let accountID: String
@@ -55,9 +79,14 @@ struct DaylightSnapshot: Codable, Equatable {
     let nextMilestone: DaylightMilestone?
     var taskCount: Int? = nil
     var completedCount: Int? = nil
+    var days: [DaylightCalendarDay]? = nil
 
     var total: Int { taskCount ?? tasks.count }
     var completed: Int { completedCount ?? tasks.filter(\.done).count }
+    var calendarDays: [DaylightCalendarDay] {
+        if let days, !days.isEmpty { return days }
+        return [DaylightCalendarDay(date: date, tasks: tasks, events: [])]
+    }
 }
 
 enum DaylightError: LocalizedError {
@@ -78,6 +107,19 @@ enum DaylightError: LocalizedError {
 }
 
 enum DaylightCache {
+    private static var preferences: UserDefaults? {
+        guard let group = Bundle.main.object(forInfoDictionaryKey: "DaylightAppGroup") as? String,
+              !group.isEmpty else { return nil }
+        return UserDefaults(suiteName: group)
+    }
+
+    static var selectedDate: String? { preferences?.string(forKey: "widget.selectedDate") }
+    static func offset(for day: String) -> Int { max(0, preferences?.integer(forKey: "widget.offset.\(day)") ?? 0) }
+    static func select(_ day: String, offset: Int) {
+        preferences?.set(day, forKey: "widget.selectedDate")
+        preferences?.set(max(0, offset), forKey: "widget.offset.\(day)")
+    }
+
     private static var file: URL? {
         guard let group = Bundle.main.object(forInfoDictionaryKey: "DaylightAppGroup") as? String,
               !group.isEmpty else { return nil }

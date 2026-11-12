@@ -1,6 +1,6 @@
 import { env } from "cloudflare:workers";
 import { getDaylightSession } from "../../identity";
-import { change, day, PlannerError, readDay, readCalendar, readTaskCatalog, readBacklog, today, widgetPlan } from "../../../lib/planner-core";
+import { change, day, PlannerError, readDay, readCalendar, readTaskCatalog, readBacklog, today, widgetPlan, widgetWeekPlan } from "../../../lib/planner-core";
 import { calendarSyncStatus, syncSavedGoogleCalendars } from "../../../lib/google-auth";
 
 export const dynamic = "force-dynamic";
@@ -27,6 +27,9 @@ export async function GET(request: Request) {
     }
     const data = await readDay(env.DB, session.user, date, env.DAYLIGHT_AUTH_MODE === "google");
     data.calendarSync = await calendarSyncStatus(env, session.user.userId);
+    if (session.client === "mac" && view === "widget") {
+      return Response.json(widgetWeekPlan(data, await readCalendar(env.DB, session.user, date, "week")), { headers });
+    }
     return Response.json(session.client === "mac" ? widgetPlan(data) : data, { headers });
   } catch (error) { return fail(error); }
 }

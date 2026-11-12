@@ -4,7 +4,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { createElement, Fragment } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import ts from 'typescript';
-import { change, dailyTaskItems, readTaskCatalog, readBacklog, readDay, widgetPlan } from '../lib/planner-core.ts';
+import { change, dailyTaskItems, readTaskCatalog, readBacklog, readDay, widgetPlan, widgetWeekPlan } from '../lib/planner-core.ts';
 
 Error.stackTraceLimit = 0;
 
@@ -309,3 +309,23 @@ assert.deepEqual(beforeOrder.prepare('SELECT id,owner_id,task_id,title,created_a
 assert.deepEqual(beforeOrder.prepare('SELECT id,sort_order FROM task_backlog ORDER BY id').all().map(row => [row.id, row.sort_order]), [['child-draft', 5], ['root-draft', 8]], 'Existing drafts keep their place after existing tasks and children');
 beforeOrder.close();
 console.log('Backlog order migration checks passed.');
+
+const weekTasks = Array.from({ length: 7 }, (_, index) => ({ ...task, id: `week-task-${index}`, date: '2026-11-12', endDate: null, done: Number(index > 3) }));
+weekTasks.push({ ...task, id: 'next-day-parent', date: '2026-11-11', endDate: '2026-11-20', subtasks: [
+  { id: 'next-day-child', taskId: 'next-day-parent', title: 'Tomorrow only', date: '2026-11-13', done: 0, sortOrder: 1 },
+  { id: 'undated-week-child', taskId: 'next-day-parent', title: 'Not scheduled', date: null, done: 0, sortOrder: 2 },
+] }, { ...task, id: 'foreign-week-task', ownerId: 'someone-else', date: '2026-11-12', endDate: null });
+const weekEvents = [
+  { ownerId: task.ownerId, calendarId: 'calendar', eventId: 'meeting', title: 'Friday meeting', date: '2026-11-13', sourceName: 'My Calendar' },
+  { ownerId: 'someone-else', calendarId: 'other-calendar', eventId: 'private', title: 'Private meeting', date: '2026-11-13', sourceName: 'Other Calendar' },
+];
+const widgetDay = { date: '2026-11-12', me: { id: task.ownerId, name: 'Me' }, tasks: weekTasks, milestones: [] };
+const weekWidget = widgetWeekPlan(widgetDay, { from: '2026-11-09', to: '2026-11-15', tasks: weekTasks, milestones: weekEvents });
+assert.equal(weekWidget.tasks.length, 7, 'Calendar widgets receive all daily tasks');
+assert.equal(widgetPlan(widgetDay).tasks.length, 4, 'Older widgets retain their compatible response');
+assert.deepEqual(weekWidget.days.map(day => day.date), ['2026-11-09', '2026-11-10', '2026-11-11', '2026-11-12', '2026-11-13', '2026-11-14', '2026-11-15']);
+assert.deepEqual(weekWidget.days[4].tasks.map(item => item.id), ['next-day-child']);
+assert.equal(weekWidget.days[3].tasks.length, 7, 'Tomorrow and undated subtasks do not enter today');
+assert.deepEqual(weekWidget.days[4].events.map(event => event.title), ['Friday meeting']);
+assert.ok(!JSON.stringify(weekWidget).includes('Private meeting') && !JSON.stringify(weekWidget).includes('foreign-week-task'), 'Only the owner’s task and calendar details reach the widget');
+console.log('Weekly widget checks passed: full task lists, exact dates, private calendars and legacy compatibility.');

@@ -133,19 +133,33 @@ export function calendarTaskGroups(tasks: Task[], date: string) {
   return tasks.map(task => ({ task, items: dailyTaskItems([task], date) }))
     .filter(({ task, items }) => items.length > 0 && (task.subtasks.length > 0 || !task.endDate || task.endDate === task.date));
 }
-export function widgetPlan(data: DayData) {
-  const items = data.tasks.filter(task => task.ownerId === data.me.id).flatMap(task =>
-    dailyTaskItems([task], data.date).map(item => ({
+function widgetTasks(tasks: Task[], ownerId: string, date: string) {
+  return tasks.filter(task => task.ownerId === ownerId).flatMap(task =>
+    dailyTaskItems([task], date).map(item => ({
       ...item, projectTitle: task.projectId ? task.projectTitle ?? null : null,
       projectHue: task.projectId ? taskHue(task) : null,
     }))
   ).sort((a, b) => Number(a.done) - Number(b.done));
+}
+export function widgetPlan(data: DayData) {
+  const items = widgetTasks(data.tasks, data.me.id, data.date);
   const next = data.milestones[0];
   return {
     date: data.date, accountID: data.me.id,
     tasks: items.slice(0, 4), taskCount: items.length, completedCount: items.filter(task => task.done).length,
     nextMilestone: next ? { title: next.title, date: next.date } : null,
   };
+}
+export function widgetWeekPlan(data: DayData, calendar: CalendarData) {
+  const days = Array.from({ length: 7 }, (_, index) => {
+    const date = addDays(calendar.from, index);
+    return {
+      date, tasks: widgetTasks(calendar.tasks, data.me.id, date),
+      events: calendar.milestones.filter(event => event.ownerId === data.me.id && event.date === date)
+        .map(event => ({ id: milestoneKey(event), title: event.title, source: event.sourceName })),
+    };
+  });
+  return { ...widgetPlan(data), tasks: widgetTasks(data.tasks, data.me.id, data.date), days };
 }
 export async function listMilestones(db: D1Database, from: string, to: string, ownerId?: string) {
   day(from); day(to);

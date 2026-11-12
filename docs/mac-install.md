@@ -1,12 +1,12 @@
 # daylight Mac 위젯 설치
 
-[설치 파일 받기](https://github.com/Lunamana00/daylight/releases/download/v1.1.0-beta.1/daylight-1.1.0-macos-universal.dmg) · [릴리스 페이지](https://github.com/Lunamana00/daylight/releases/tag/v1.1.0-beta.1) · [daylight 웹](https://daylight-google.galaxycoreadvence.workers.dev)
+[설치 파일 받기](https://github.com/Lunamana00/daylight/releases/download/v1.2.0-beta.1/daylight-1.2.0-macos-universal.dmg) · [릴리스 페이지](https://github.com/Lunamana00/daylight/releases/tag/v1.2.0-beta.1) · [daylight 웹](https://daylight-google.galaxycoreadvence.workers.dev)
 
 macOS 26 이상에서 사용할 수 있습니다. Apple Silicon과 Intel용 앱이 함께 들어 있습니다. Xcode와 GitHub 계정은 필요 없습니다. daylight에 초대된 Google 계정은 필요합니다.
 
 ## 설치하고 로그인하기
 
-1. 위 링크에서 `daylight-1.1.0-macos-universal.dmg`를 받습니다.
+1. 위 링크에서 `daylight-1.2.0-macos-universal.dmg`를 받습니다.
 2. 파일을 열고 **daylight.app**을 옆의 **Applications** 폴더로 끌어 놓습니다. 기존 앱을 사용 중이면 먼저 종료합니다.
 3. Finder의 **응용 프로그램**에서 **daylight**를 실행합니다. 설치 디스크 안에서 직접 실행하지 않습니다.
 4. **Google로 로그인**을 누르고 daylight에 초대된 계정으로 로그인합니다.
@@ -18,11 +18,13 @@ macOS 26 이상에서 사용할 수 있습니다. Apple Silicon과 Intel용 앱�
 
 1. 바탕화면의 빈 곳을 우클릭하고 **위젯 편집**을 엽니다.
 2. **daylight**를 검색합니다.
-3. 중간 크기 위젯을 바탕화면에 추가하고 **완료**를 누릅니다.
+3. **daylight 주간 달력**의 가장 큰 크기를 바탕화면에 추가하고 **완료**를 누릅니다. 기존 위젯은 우클릭한 뒤 크기를 바꿀 수 있습니다.
 
-오늘의 미완료 할 일을 먼저 표시합니다. 화면에는 최대 네 항목이 나오며, 위쪽 완료 수는 오늘의 전체 할 일을 기준으로 합니다. 하위 할 일은 지정한 날짜에 표시합니다. 프로젝트를 지정한 할 일에는 프로젝트 이름과 색 포인트가 나옵니다.
+가장 큰 크기에서는 월요일부터 일요일까지 나란히 표시합니다. 중간 크기와 큰 크기에서는 주간 날짜 줄과 선택한 날의 내용을 표시합니다. 날짜를 누르면 해당 날짜의 할 일과 Google 일정이 나옵니다. 하위 할 일도 지정한 날짜에만 표시합니다.
 
-위젯의 체크박스로 완료 상태를 바꿀 수 있습니다. 새로고침 버튼은 할 일과 연결된 Google 캘린더를 동기화합니다. 위젯의 본문을 누르면 daylight 웹이 열립니다. 할 일 순서는 웹의 **내 할 일**에서 손잡이를 끌거나 메뉴의 **위로 이동 / 아래로 이동**으로 바꿉니다. 바뀐 순서는 위젯에도 반영됩니다.
+제목은 여러 줄로 표시합니다. 프로젝트와 상위 작업 이름은 제목 위에 표시하고, 같은 이름은 반복하지 않습니다. 공간이 부족하면 아래 페이지 버튼으로 나머지 항목을 볼 수 있습니다. 위쪽 완료 수는 오늘의 전체 할 일을 기준으로 합니다. 완료 항목은 미완료 항목 아래에 표시합니다.
+
+오늘 할 일의 체크박스로 완료 상태를 바꿀 수 있습니다. 다른 날짜의 할 일을 누르면 웹이 열립니다. 새로고침 버튼은 할 일과 연결된 Google 캘린더를 동기화합니다. 위젯의 본문을 누르면 daylight 웹이 열립니다. 할 일 순서는 웹의 **내 할 일**에서 손잡이를 끌거나 손잡이에 포커스를 둔 상태에서 방향키로 바꿉니다. 바뀐 순서는 위젯에도 반영됩니다.
 
 Google 일정은 웹의 **설정 → Google 캘린더 선택**에서 연결합니다. 위젯을 우클릭하고 **위젯 편집**을 선택하면 Google 일정 표시를 켜거나 끌 수 있습니다.
 
@@ -35,4 +37,4 @@ Google 일정은 웹의 **설정 → Google 캘린더 선택**에서 연결합�
 
 설치 파일에는 다른 사용자의 할 일, 캘린더 기록, 로그인 정보가 포함되지 않습니다. 로그인한 본인의 데이터가 서버에서 동기화됩니다.
 
-이 배포판은 Mac 빌드와 서명 검사를 통과했습니다. 다른 사람의 Mac에서의 최초 설치와 로그인은 아직 확인하지 않았습니다.
+이 배포판은 Mac 앱 빌드와 주간 데이터 검사를 통과했습니다. 실제 위젯 화면과 다른 사람의 Mac에서의 최초 설치는 아직 확인하지 않았습니다.

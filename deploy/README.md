@@ -84,9 +84,9 @@ To build the app from source:
 1. Install Xcode 26 or later. Open `macos/Daylight.xcodeproj` in Xcode.
 2. Select the same Apple signing team for **Daylight** and **DaylightWidget**. Set `DAYLIGHT_SERVER_URL` in the **Daylight** build settings to the Google Worker origin.
 3. Run **Daylight**. Select **Google로 로그인** and use an invited account.
-4. Open **Edit Widgets** on the desktop. Add the medium **daylight** widget. Select **Clear** in the Mac appearance settings for the system glass style.
+4. Open **Edit Widgets** on the desktop. Add **daylight 주간 달력**. Select the extra-large size for seven day columns. Select **Clear** in the Mac appearance settings for the system glass style.
 
-The widget shows up to four tasks scheduled for today. This includes dated subtasks. The header shows the completion count for all tasks scheduled for today. Right-click the widget and select **Edit Widget** to change **Google 일정 표시**. The Mac app holds the session in Keychain. A completion check runs in the Mac app and changes the same task on the Worker.
+The widget supports medium, large, and extra-large sizes. The extra-large size shows the week in seven columns. The other sizes show a week strip and the selected day's details. The app reads the full week through `/api/planner?view=widget`. Each day contains only its scheduled tasks and the owner's Google events. Titles wrap. Page buttons show remaining items. Today’s tasks support completion changes. Other dates open the web planner. The header shows the full completion count for today. Right-click the widget and select **Edit Widget** to change **Google 일정 표시**. The Mac app holds the session in Keychain. A completion check runs in the Mac app and changes the same task on the Worker.
 
 Open **작업물** and select a project. Select a color below its name, or select **자동** for its default color. Linked tasks and subtasks use this color in the web planner and Mac widget. The widget also shows the project name.
 

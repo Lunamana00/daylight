@@ -91,8 +91,9 @@ final class PlannerConnection: NSObject, ObservableObject, ASWebAuthenticationPr
         defer { working = false }
         do {
             let body = try JSONEncoder().encode(["op": "calendar.sync"])
-            let data = try await request("api/planner", body: body, login: activeLogin(), timeout: 120)
-            try publish(JSONDecoder().decode(DaylightSnapshot.self, from: data))
+            let login = try activeLogin()
+            _ = try await request("api/planner", body: body, login: login, timeout: 120)
+            try publish(await snapshot(using: login))
         } catch {
             if let login, let current = try? await snapshot(using: login) { try? publish(current) }
             show(error)
@@ -114,8 +115,8 @@ final class PlannerConnection: NSObject, ObservableObject, ASWebAuthenticationPr
                 throw DaylightError.stale
             }
             let body = try JSONEncoder().encode(Completion(op: task.subtask == true ? "subtask.patch" : "task.patch", id: taskID, done: done, viewDate: day))
-            let data = try await request("api/planner", body: body, login: login)
-            try publish(JSONDecoder().decode(DaylightSnapshot.self, from: data))
+            _ = try await request("api/planner", body: body, login: login)
+            try publish(await snapshot(using: login))
         } catch {
             show(error)
             throw error
@@ -151,13 +152,16 @@ final class PlannerConnection: NSObject, ObservableObject, ASWebAuthenticationPr
     }
 
     private func snapshot(using login: DaylightLogin) async throws -> DaylightSnapshot {
-        let data = try await request("api/planner", login: login)
+        let data = try await request("api/planner", login: login, query: [URLQueryItem(name: "view", value: "widget")])
         return try JSONDecoder().decode(DaylightSnapshot.self, from: data)
     }
 
-    private func request(_ path: String, body: Data? = nil, login: DaylightLogin? = nil, timeout: TimeInterval = 20) async throws -> Data {
+    private func request(_ path: String, body: Data? = nil, login: DaylightLogin? = nil, timeout: TimeInterval = 20, query: [URLQueryItem] = []) async throws -> Data {
         guard let server else { throw DaylightError.server }
-        var request = URLRequest(url: server.appending(path: path), cachePolicy: .reloadIgnoringLocalCacheData)
+        var url = URLComponents(url: server.appending(path: path), resolvingAgainstBaseURL: false)!
+        if !query.isEmpty { url.queryItems = query }
+        guard let requestURL = url.url else { throw DaylightError.server }
+        var request = URLRequest(url: requestURL, cachePolicy: .reloadIgnoringLocalCacheData)
         request.timeoutInterval = timeout
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         if let login { request.setValue("Bearer " + login.session, forHTTPHeaderField: "Authorization") }
