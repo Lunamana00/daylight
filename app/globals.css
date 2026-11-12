@@ -436,9 +436,9 @@ input:focus-visible,textarea:focus-visible,select:focus-visible{outline:2px soli
 .subtask-add-actions{margin-left:auto;flex-wrap:nowrap}
 .subtask-add-actions>.text-button{padding:6px 12px;min-height:32px;border-radius:5px;background:var(--accent);color:#fff}
 .subtask-backlog{padding-top:12px}
-.task-work-scope{padding-top:12px;margin-bottom:6px}
 .task-scope-switch{flex-wrap:wrap}
-.task-backlog-pane>.backlog-list{padding:0 24px 12px}
+.task-work-list>.backlog-row{padding:15px 0 15px 28px}
+.task-work-list>.backlog-row .backlog-content{font-size:13px}
 .backlog-list{list-style:none;margin:0;padding:0}
 .backlog-row{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--border)}
 .backlog-row:last-child{border-bottom:0}

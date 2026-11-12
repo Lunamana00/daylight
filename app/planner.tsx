@@ -6,7 +6,7 @@ import { addDays, dailyTaskItems, today } from "../lib/planner-core";
 import type { BacklogItem, DayData, Subtask, Task } from "../lib/planner-core";
 import { PlannerCalendar } from "../components/planner-calendar";
 import { PlannerDailySubtask, PlannerTask } from "../components/planner-task";
-import { PlannerBacklog } from "../components/planner-backlog";
+import { PlannerBacklogRow } from "../components/planner-backlog";
 import { WorkLog } from "../components/work-log";
 
 type View = "mine" | "together" | "work";
@@ -25,8 +25,7 @@ export default function Planner({ googleLogin = false }: { googleLogin?: boolean
   const [data, setData] = useState<DayData | null>(null);
   const [view, setView] = useState<View>("mine");
   const [taskLayout, setTaskLayout] = useState<"split" | "list">("split");
-  const [taskScope, setTaskScope] = useState<"day" | "all" | "unscheduled">("day");
-  const [workScope, setWorkScope] = useState<"active" | "unscheduled">("active");
+  const [taskScope, setTaskScope] = useState<"day" | "all">("day");
   const [backlog, setBacklog] = useState<BacklogItem[]>([]);
   const [deleteBacklog, setDeleteBacklog] = useState<BacklogItem | null>(null);
   const [catalog, setCatalog] = useState<Task[] | null>(null);
@@ -207,10 +206,11 @@ export default function Planner({ googleLogin = false }: { googleLogin?: boolean
 
   function catalogRows(tasks: Task[], empty: string) {
     const active = tasks.filter(task => !task.done), finished = tasks.filter(task => task.done);
+    const undated = backlog.filter(item => !item.taskId);
     const row = (task: Task) => taskRow(task, { order: tasks, grouped: Boolean(task.endDate && task.endDate > task.date) || task.subtasks.length > 0 || Boolean(task.unscheduledCount) });
     return <>{catalogError && <p className="error-banner" role="alert">{catalogError}<button onClick={() => void load(date, true)}>다시 시도</button></p>}
       {catalog === null ? <p className="empty-tasks" role="status">{catalogError ? "작업을 불러오지 못했어요." : "작업 불러오는 중…"}</p> : <>
-        {active.length ? <ul className="task-list task-work-list">{active.map(row)}</ul> : <p className="empty-tasks">{empty}</p>}
+        {active.length || undated.length ? <ul className="task-list task-work-list">{active.map(row)}{undated.map(item => <PlannerBacklogRow key={item.id} item={item} date={date} busy={busy} onChange={mutate} onDelete={removeBacklog} />)}</ul> : <p className="empty-tasks">{empty}</p>}
         {finished.length > 0 && <details className="completed-work"><summary>완료한 작업 <span>{finished.length}</span></summary><ul className="task-list task-work-list">{finished.map(row)}</ul></details>}
       </>}
     </>;
@@ -224,11 +224,6 @@ export default function Planner({ googleLogin = false }: { googleLogin?: boolean
       : taskRow(task, { order: myTasks.filter(item => !item.subtasks.length) }))}</ul>
       : <p className="empty-tasks">{myTasks.length ? filter === "done" ? "완료한 할 일 없음" : "남은 할 일 없음" : "오늘 할 일 없음"}</p>}
   </section>;
-  const backlogPanel = <section className="task-backlog-pane" aria-label="날짜 미정 할 일">
-    <div className="task-pane-heading"><h3>날짜 미정 <span className="muted">{backlog.length}</span></h3><button className="text-button" disabled={busy} onClick={() => { setDraftUnscheduled(true); taskInput.current?.focus(); taskInput.current?.scrollIntoView({ block: "nearest", behavior: "smooth" }); }}>＋ 할 일</button></div>
-    {catalogError && <p className="error-banner" role="alert">{catalogError}<button onClick={() => void load(date, true)}>다시 시도</button></p>}
-    {catalog === null ? <p className="empty-tasks" role="status">불러오는 중…</p> : backlog.length ? <PlannerBacklog items={backlog} date={date} busy={busy} onChange={mutate} onDelete={removeBacklog} /> : <p className="empty-tasks">날짜를 정하지 않은 할 일을 여기에 모아두세요.</p>}
-  </section>;
   const composer = <form className="task-composer" onKeyDown={event => {
                 if (event.key !== "Enter" || !event.metaKey || event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229) return;
                 event.preventDefault();
@@ -236,10 +231,10 @@ export default function Planner({ googleLogin = false }: { googleLogin?: boolean
               }} onSubmit={async event => {
                 event.preventDefault();
                 if (busy || !draft.trim()) return;
-                if (await mutate({ op: draftUnscheduled ? "backlog.add" : "task.add", date: periodStart, endDate: periodEnd === periodStart ? null : periodEnd, title: draft, projectId: draftProject || null }, draftUnscheduled ? "날짜 미정에 보관했어요." : periodEnd > periodStart ? "기간을 달력에 추가했어요." : undefined)) {
+                if (await mutate({ op: draftUnscheduled ? "backlog.add" : "task.add", date: periodStart, endDate: periodEnd === periodStart ? null : periodEnd, title: draft, projectId: draftProject || null }, draftUnscheduled ? "작업 목록에 추가했어요." : periodEnd > periodStart ? "기간을 달력에 추가했어요." : undefined)) {
                   setDraft("");
                   setFilter("all");
-                  if (draftUnscheduled) { setWorkScope("unscheduled"); setTaskScope("unscheduled"); } else selectDate(periodStart);
+                  if (draftUnscheduled) setTaskScope("all"); else selectDate(periodStart);
                   taskInput.current?.focus();
                 }
               }}>
@@ -278,8 +273,8 @@ export default function Planner({ googleLogin = false }: { googleLogin?: boolean
                 setTaskLayout(value);
                 try { localStorage.setItem("daylight.task-layout.v1", value); } catch { /* Keep the current choice in memory. */ }
               }}><option value="split">작업·오늘 분할형</option><option value="list">목록 전환형</option></select></label></div>
-              {taskLayout === "list" && <div className="task-scope-switch" role="group" aria-label="작업 표시 범위"><button className={taskScope === "day" ? "selected" : ""} aria-pressed={taskScope === "day"} disabled={busy || Boolean(draggedTask)} onClick={() => setTaskScope("day")}>{date === today() ? "오늘" : "선택한 날"}</button><button className={taskScope === "all" ? "selected" : ""} aria-pressed={taskScope === "all"} disabled={busy || Boolean(draggedTask)} onClick={() => setTaskScope("all")}>전체 작업</button><button className={taskScope === "unscheduled" ? "selected" : ""} aria-pressed={taskScope === "unscheduled"} disabled={busy || Boolean(draggedTask)} onClick={() => setTaskScope("unscheduled")}>날짜 미정 {backlog.length}</button></div>}
-              {taskLayout === "split" ? <div className="task-split-panes"><section className="task-group-pane" aria-label="작업 관리"><div className="task-scope-switch task-work-scope" role="group" aria-label="작업 목록"><button className={workScope === "active" ? "selected" : ""} aria-pressed={workScope === "active"} disabled={busy || Boolean(draggedTask)} onClick={() => setWorkScope("active")}>진행 중인 일</button><button className={workScope === "unscheduled" ? "selected" : ""} aria-pressed={workScope === "unscheduled"} disabled={busy || Boolean(draggedTask)} onClick={() => setWorkScope("unscheduled")}>날짜 미정 {backlog.length}</button></div>{workScope === "unscheduled" ? backlogPanel : catalogRows(groupTasks, "진행 중인 일이 없어요.")}</section>{dailyPanel}</div> : taskScope === "day" ? dailyPanel : taskScope === "unscheduled" ? backlogPanel : <section className="task-all-pane" aria-label="전체 작업">{catalogRows(ownCatalog, "아직 등록한 작업이 없어요.")}</section>}
+              {taskLayout === "list" && <div className="task-scope-switch" role="group" aria-label="작업 표시 범위"><button className={taskScope === "day" ? "selected" : ""} aria-pressed={taskScope === "day"} disabled={busy || Boolean(draggedTask)} onClick={() => setTaskScope("day")}>{date === today() ? "오늘" : "선택한 날"}</button><button className={taskScope === "all" ? "selected" : ""} aria-pressed={taskScope === "all"} disabled={busy || Boolean(draggedTask)} onClick={() => setTaskScope("all")}>전체 작업</button></div>}
+              {taskLayout === "split" ? <div className="task-split-panes"><section className="task-group-pane" aria-label="작업 관리"><div className="task-pane-heading"><h3>진행 중인 일</h3></div>{catalogRows(groupTasks, "진행 중인 일이 없어요.")}</section>{dailyPanel}</div> : taskScope === "day" ? dailyPanel : <section className="task-all-pane" aria-label="전체 작업">{catalogRows(ownCatalog, "아직 등록한 작업이 없어요.")}</section>}
               {composer}
             </section> : <p className="calendar-status" role="status">{error ? "이 날짜의 할 일을 불러오지 못했어요." : "할 일 불러오는 중…"}</p>)}
             {view === "mine" && <PlannerCalendar date={date} data={data} busy={busy} onChange={mutate} onSelectDate={selectDate} onManage={() => setModal("connections")} onOpenTask={openTask} />}

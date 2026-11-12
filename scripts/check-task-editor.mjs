@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
-import { createElement } from 'react';
+import { createElement, Fragment } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import ts from 'typescript';
 import { change, dailyTaskItems, readTaskCatalog, readBacklog, readDay, widgetPlan } from '../lib/planner-core.ts';
@@ -18,6 +18,7 @@ function moduleURL(path, imports = {}) {
 }
 const coreURL = new URL('../lib/planner-core.ts', import.meta.url).href;
 const backlogURL = moduleURL('../components/planner-backlog.tsx', { '../lib/planner-core': coreURL });
+const { PlannerBacklogRow } = await import(backlogURL);
 const { PlannerTask, PlannerDailySubtask } = await import(moduleURL('../components/planner-task.tsx', { '../lib/planner-core': coreURL, './planner-backlog': backlogURL }));
 const { changeWork, readWorkCatalog, readWorkDetail } = await import(moduleURL('../lib/work-log.ts', { './planner-core': coreURL, './work-log-types': moduleURL('../lib/work-log-types.ts') }));
 const task = {
@@ -42,8 +43,9 @@ assert.deepEqual(dailyTaskItems([task], task.date), [], 'A period without subtas
 console.log('Period editor checks passed: direct editing, original dates, subtasks, read-only access, and daily list exclusion.');
 
 const plannerSource = ts.createSourceFile('planner.tsx', readFileSync(new URL('../app/planner.tsx', import.meta.url), 'utf8'), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
-let shortcut;
+let shortcut, catalogRenderer;
 function findComposer(node) {
+  if (ts.isFunctionDeclaration(node) && node.name?.text === 'catalogRows') catalogRenderer = node.getText(plannerSource);
   if (ts.isJsxOpeningElement(node) && node.tagName.getText(plannerSource) === 'form' && node.attributes.properties.some(attr => ts.isJsxAttribute(attr) && attr.name.getText(plannerSource) === 'className' && attr.initializer?.text === 'task-composer')) {
     shortcut = node.attributes.properties.find(attr => ts.isJsxAttribute(attr) && attr.name.getText(plannerSource) === 'onKeyDown')?.initializer?.expression?.getText(plannerSource);
   }
@@ -71,6 +73,25 @@ for (const test of [
   assert.deepEqual([submitted, prevented], [test.submitted, test.prevented], test.name);
 }
 console.log('Task shortcut checks passed: Command Enter, newlines, Korean composition, held keys, and submission guards.');
+
+assert.ok(catalogRenderer);
+const createCatalogRenderer = new Function('backlog', 'catalog', 'catalogError', 'taskRow', 'PlannerBacklogRow', 'createElement', 'Fragment', 'date', 'busy', 'mutate', 'removeBacklog',
+  ts.transpileModule(catalogRenderer, { compilerOptions: { target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.React, jsxFactory: 'createElement', jsxFragmentFactory: 'Fragment' } }).outputText + '\nreturn catalogRows;');
+const renderCatalog = (tasks, backlog) => renderToStaticMarkup(createCatalogRenderer(
+  backlog, tasks, '', value => createElement('li', { key: value.id }, value.title), PlannerBacklogRow, createElement, Fragment, task.date, false, async () => true, () => {},
+)(tasks, '작업 없음'));
+const undatedWork = { id: 'undated-work', title: '날짜 없는 작업', taskId: null, taskTitle: null, taskDate: null, taskEndDate: null, projectId: null, projectTitle: null, projectHue: null };
+const mixedCatalog = renderCatalog([task, { ...task, id: 'finished', title: '끝낸 작업', done: 1 }], [
+  undatedWork,
+  { ...undatedWork, id: 'nested-draft', taskId: task.id, title: '부모 안의 세부 계획' },
+  { ...undatedWork, id: 'nested-child', taskId: task.id, subtask: 1, title: '부모 안의 하위 할 일' },
+]);
+assert.match(mixedCatalog, /class="task-list task-work-list">[\s\S]*강화학습 논문 발표[\s\S]*날짜 없는 작업[\s\S]*<\/ul><details class="completed-work">/, 'Dated and undated work share one list before completed work');
+assert.doesNotMatch(mixedCatalog, /부모 안의/, 'Undated children stay with their parent instead of appearing as separate work');
+assert.match(mixedCatalog, /aria-label="날짜 없는 작업 날짜 지정"/, 'Undated work keeps its scheduling control');
+assert.match(renderCatalog([], []), /작업 없음/);
+assert.doesNotMatch(renderCatalog([], [undatedWork]), /작업 없음/, 'An undated-only list is not empty');
+console.log('Work list checks passed: undated work in the main list, parent-only subtasks, and completed work below.');
 
 const taskSource = ts.createSourceFile('planner-task.tsx', readFileSync(new URL('../components/planner-task.tsx', import.meta.url), 'utf8'), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
 let scheduleChange, editScheduleChange;
