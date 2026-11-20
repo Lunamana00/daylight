@@ -1,4 +1,5 @@
 import Foundation
+import CoreGraphics
 
 enum Daylight {
     static let openApp = URL(string: "daylight-mac://planner")!
@@ -235,5 +236,23 @@ enum DaylightCache {
         } catch let error as CocoaError where error.code == .fileNoSuchFile {
             // A new installation has no cached account data.
         }
+    }
+}
+
+// Geometry shared by pointer and keyboard widget resizing.
+enum DaylightDesktopLayout {
+    static let minimum = CGSize(width: 720, height: 360)
+
+    static func fitted(_ frame: CGRect, in screen: CGRect) -> CGRect {
+        let width = min(screen.width, max(minimum.width, frame.width))
+        let height = min(screen.height, max(minimum.height, frame.height))
+        return CGRect(x: min(max(frame.minX, screen.minX), screen.maxX - width),
+                      y: min(max(frame.minY, screen.minY), screen.maxY - height), width: width, height: height)
+    }
+
+    static func resized(_ frame: CGRect, dx: Double, dy: Double, in screen: CGRect) -> CGRect {
+        let width = min(screen.maxX - frame.minX, max(minimum.width, frame.width + dx))
+        let height = min(frame.maxY - screen.minY, max(minimum.height, frame.height - dy))
+        return fitted(CGRect(x: frame.minX, y: frame.maxY - height, width: width, height: height), in: screen)
     }
 }

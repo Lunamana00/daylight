@@ -18,13 +18,15 @@ Set your own daily tasks. See what other people plan and complete.
 
 Select one or more calendars in **설정**. The server reads the selected calendars every five minutes. Use **지금 동기화** or the refresh button in the Mac widget to request an update. Failed imports keep the last saved events. Task records and saved event order remain unchanged.
 
-The Mac app opens a large calendar window. Drag its edges to change its size. It shows today and the next three days. The time grid starts near the current Seoul time. Select **지금** to return to the current time. Task titles stay on one line. Long titles move across the row. Put the pointer on a title to stop it, or select **글자 흐름**. The app respects the Mac Reduce Motion setting.
+The Mac app places a transparent calendar on the desktop. It stays below normal app windows. It has no title bar or Dock icon. Drag the date area or the move handle to change its position. Drag the lower-right handle to change its size. The app saves the position and size. Use the daylight menu bar icon to show, hide, or close it.
+
+The calendar starts at 1000 by 500 points. It shows today and the next three days. The time grid starts near the current Seoul time. Select **지금** to return to the current time. Task titles stay on one line. Long titles move across the row. Put the pointer on a title to stop it, or select **글자 흐름**. The app respects the Mac Reduce Motion setting.
 
 Drag a task handle to change its order for that day. Completed tasks stay below open tasks. The web daily list and widget use the same order. To move Google events, select **Google 일정 이동 허용** in the app menu or web settings. Grant access and select calendars. Drag an event to another date or time. The app keeps its duration. A repeating event changes only for that occurrence. Google sends change notices to attendees. Read-only calendars stay read-only.
 
-The extra-large Mac widget shows a four-day time grid. Medium and large sizes show a week strip and the selected day's details. Today’s checkboxes change completion. The expand button opens the calendar window for editing. The widget body opens the web planner. Use **Edit Widget** to show or hide Google Calendar events.
+You can also add the system widget through **Edit Widgets**. The extra-large size shows a four-day time grid. Medium and large sizes show a week strip and the selected day's details. Today’s checkboxes change completion. The expand button shows the desktop calendar for editing. The widget body opens the web planner. Use **Edit Widget** to show or hide Google Calendar events.
 
-Download the [Mac installer](https://github.com/Lunamana00/daylight/releases/tag/v1.4.0-beta.1) and follow the [installation guide](docs/mac-install.md). The installer requires macOS 26 or later. It supports Apple Silicon and Intel. You do not need Xcode or a GitHub account. This beta uses a development signature. Apple has not notarized it.
+Download the [Mac installer](https://github.com/Lunamana00/daylight/releases/tag/v1.4.1-beta.1) and follow the [installation guide](docs/mac-install.md). The installer requires macOS 26 or later. It supports Apple Silicon and Intel. You do not need Xcode or a GitHub account. This beta uses a development signature. Apple has not notarized it.
 
 See [deployment instructions](deploy/README.md) for Google login, database setup, and source builds.
 

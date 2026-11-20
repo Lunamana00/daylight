@@ -272,7 +272,7 @@ final class PlannerConnection: NSObject, ObservableObject, ASWebAuthenticationPr
     }
 
     func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {
-        NSApplication.shared.keyWindow ?? NSApplication.shared.mainWindow ?? ASPresentationAnchor()
+        NSApplication.shared.keyWindow ?? NSApplication.shared.windows.first(where: { $0 is DesktopCalendarPanel }) ?? ASPresentationAnchor()
     }
 
     private func randomToken() throws -> String {

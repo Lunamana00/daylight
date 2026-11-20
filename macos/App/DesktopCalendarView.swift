@@ -22,13 +22,11 @@ struct DesktopCalendarView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            header
-            Divider().opacity(0.5)
             if connection.signedIn {
                 GeometryReader { geometry in
                     let width = max(0, geometry.size.width - 40)
                     let unit = width / 4.65
-                    let agendaHeight = min(230, max(140, geometry.size.height * 0.3))
+                    let agendaHeight = min(180, max(80, geometry.size.height * 0.3))
                     HStack(alignment: .top, spacing: 0) {
                         ForEach(Array(days.enumerated()), id: \.element.date) { index, day in
                             dayColumn(day, today: index == 0, agendaHeight: agendaHeight)
@@ -50,8 +48,10 @@ struct DesktopCalendarView: View {
             footer
         }
         .coordinateSpace(name: "calendar")
-        .background(CalendarGlass())
-        .background(Color(nsColor: .windowBackgroundColor).opacity(0.12))
+        .preferredColorScheme(.dark)
+        .foregroundStyle(.white)
+        .tint(.white)
+        .clipShape(RoundedRectangle(cornerRadius: 28))
         .onPreferenceChange(CalendarFrames.self) { frames = $0 }
         .overlay(alignment: .topLeading) {
             if let drag = taskDrag {
@@ -68,7 +68,7 @@ struct DesktopCalendarView: View {
                 .allowsHitTesting(false)
             }
         }
-        .frame(minWidth: 900, minHeight: 560)
+        .frame(minWidth: 720, minHeight: 360)
         .task { await connection.refresh() }
         .onReceive(clock) { date in
             let changedDay = Daylight.dayKey(date) != Daylight.dayKey(now)
@@ -79,52 +79,40 @@ struct DesktopCalendarView: View {
             now = Date(); Task { await connection.refresh() }
         }
         .onExitCommand { taskDrag = nil; eventDrag = nil }
-        .onOpenURL { url in
-            if url == Daylight.openApp, let server = connection.server, NSWorkspace.shared.open(server) { NSApplication.shared.hide(nil) }
-            if url == Daylight.openCalendar { NSApplication.shared.activate(ignoringOtherApps: true) }
-        }
-    }
-
-    private var header: some View {
-        HStack(spacing: 12) {
-            Label("daylight", systemImage: "sun.max").font(.system(size: 15, weight: .semibold))
-            Text("데스크톱 달력").font(.system(size: 12)).foregroundStyle(.secondary)
-            Spacer()
-            Button { flow.toggle() } label: { Label("글자 흐름", systemImage: flow ? "pause" : "play") }
-                .help(flow ? "긴 제목 흐름 일시 정지" : "긴 제목 흐름 재생")
-            Button("지금") { now = Date(); manualMinute = nil }.keyboardShortcut("0", modifiers: .command)
-            Button { Task { try? await connection.synchronize() } } label: { Image(systemName: "arrow.clockwise") }
-                .disabled(connection.working || !connection.signedIn).help("Google 일정 동기화")
-            Menu {
-                if let server = connection.server {
-                    Button("웹에서 열기") { NSWorkspace.shared.open(server) }
-                    Button("Google 일정 이동 허용…") { NSWorkspace.shared.open(server.appending(path: "calendar/edit")) }
-                }
-                Divider()
-                Button("로그아웃") { Task { await connection.signOut() } }.disabled(connection.working || !connection.signedIn)
-            } label: { Image(systemName: "ellipsis") }.menuStyle(.borderlessButton).frame(width: 23).help("연결 및 계정")
-        }
-        .font(.system(size: 12)).buttonStyle(.bordered).controlSize(.small)
-        .padding(.leading, 78).padding(.trailing, 22).frame(height: 54)
     }
 
     private var footer: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 10) {
             if connection.working { ProgressView().controlSize(.mini) }
-            Text(connection.failed ? connection.status : dragging ? "놓아서 이동 · Esc 취소" : manualMinute == nil ? "현재 시간 중심" : "시간 이동 중")
-                .foregroundStyle(connection.failed ? Color.orange : Color.secondary).lineLimit(2)
-            Spacer()
-            if connection.signedIn, !days.flatMap(\.events).contains(where: { $0.canEdit == true }), let server = connection.server {
-                Button("일정 이동 연결") { NSWorkspace.shared.open(server.appending(path: "calendar/edit")) }.buttonStyle(.plain)
-            }
-            Button { manualMinute = max(0, startMinute - 60) } label: { Image(systemName: "chevron.up") }
+            if connection.failed { Text(connection.status).lineLimit(1) }
+            else if dragging { Text("놓아서 이동 · Esc 취소").lineLimit(1) }
+            else if let plan = connection.plan { Text("오늘 \(plan.completed)/\(plan.total) 완료") }
+            Spacer(minLength: 10)
+            Image(systemName: "arrow.up.and.down.and.arrow.left.and.right").frame(width: 22, height: 22)
+                .overlay(DesktopWidgetHandle()).help("위젯 위치 이동")
+            Button { flow.toggle() } label: { Image(systemName: flow ? "pause" : "play") }
+                .help(flow ? "글자 흐름 일시 정지" : "글자 흐름 재생")
+            Button { manualMinute = max(0, startMinute - 60) } label: { Image(systemName: "chevron.left") }
                 .disabled(startMinute <= 0).help("한 시간 이전 보기")
-            Button { manualMinute = min(1200, startMinute + 60) } label: { Image(systemName: "chevron.down") }
+            Button("지금") { now = Date(); manualMinute = nil }.keyboardShortcut("0", modifiers: .command)
+                .help("현재 시간으로 이동")
+            Button { manualMinute = min(1200, startMinute + 60) } label: { Image(systemName: "chevron.right") }
                 .disabled(startMinute >= 1200).help("한 시간 이후 보기")
-            Text("서울 \(timeLabel(DaylightTimeGrid.minute(now, on: Daylight.dayKey(now))))").monospacedDigit()
+            Button { Task { try? await connection.synchronize() } } label: { Image(systemName: "arrow.clockwise") }
+                .disabled(connection.working || !connection.signedIn).help("동기화")
+            Menu {
+                if let server = connection.server {
+                    Button("웹에서 열기") { NSWorkspace.shared.open(server) }
+                    Button("Google 일정 이동 연결…") { NSWorkspace.shared.open(server.appending(path: "calendar/edit")) }
+                }
+                Divider()
+                Button("로그아웃") { Task { await connection.signOut() } }.disabled(connection.working || !connection.signedIn)
+            } label: { Image(systemName: "ellipsis") }.menuStyle(.borderlessButton).frame(width: 18).help("연결 및 계정")
+            Image(systemName: "arrow.up.left.and.arrow.down.right").frame(width: 22, height: 22)
+                .overlay(DesktopWidgetHandle(resize: true)).help("끌어서 위젯 크기 조절")
         }
-        .font(.system(size: 11)).foregroundStyle(.secondary).buttonStyle(.plain)
-        .padding(.horizontal, 24).padding(.bottom, 15).padding(.top, 4)
+        .font(.system(size: 11, weight: .medium)).foregroundStyle(.white.opacity(0.85)).buttonStyle(.plain)
+        .padding(.horizontal, 24).padding(.bottom, 12).padding(.top, 3)
     }
 
     private func dayColumn(_ day: DaylightCalendarDay, today: Bool, agendaHeight: Double) -> some View {
@@ -132,11 +120,12 @@ struct DesktopCalendarView: View {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(Daylight.weekday(day.date) + "요일").font(.system(size: 12, weight: .medium)).foregroundStyle(.secondary)
-                    Text(String(Int(day.date.suffix(2)) ?? 0)).font(.system(size: today ? 43 : 30, weight: .regular, design: .rounded))
+                    Text(String(Int(day.date.suffix(2)) ?? 0)).font(.system(size: today ? 40 : 27, weight: .regular, design: .rounded))
                 }
                 Spacer()
-                if today { Text("오늘").font(.system(size: 11, weight: .medium)).foregroundStyle(.blue).padding(.top, 2) }
-            }.frame(height: 78, alignment: .top)
+                if today { Text("오늘").font(.system(size: 11, weight: .medium)).foregroundStyle(.white).padding(.top, 2) }
+            }.frame(height: 68, alignment: .top)
+                .background(DesktopWidgetHandle())
             ScrollView(.vertical) {
                 VStack(alignment: .leading, spacing: 3) {
                     ForEach(day.tasks) { task in taskRow(task, day: day) }
@@ -147,7 +136,7 @@ struct DesktopCalendarView: View {
                             .contextMenu { eventMenu(event) }
                     }
                     if day.tasks.isEmpty && day.events.allSatisfy({ $0.startAt != nil }) {
-                        Text("예정된 할 일 없음").font(.system(size: 12)).foregroundStyle(.tertiary).padding(.top, 5)
+                        Text("예정된 할 일 없음").font(.system(size: 12)).foregroundStyle(.white.opacity(0.55)).padding(.top, 5)
                     }
                 }.frame(maxWidth: .infinity, alignment: .leading).padding(.trailing, 4)
             }
@@ -164,7 +153,7 @@ struct DesktopCalendarView: View {
     private func taskRow(_ task: DaylightTask, day: DaylightCalendarDay) -> some View {
         HStack(spacing: 8) {
             Image(systemName: "line.3.horizontal").font(.system(size: 10, weight: .medium))
-                .foregroundStyle(.tertiary).frame(width: 14, height: 30).contentShape(Rectangle())
+                .foregroundStyle(.white.opacity(0.55)).frame(width: 14, height: 30).contentShape(Rectangle())
                 .gesture(taskGesture(task, day: day)).help("드래그해서 순서 변경")
                 .accessibilityLabel("\(task.title) 순서 변경")
                 .focusable()
@@ -172,13 +161,13 @@ struct DesktopCalendarView: View {
                 .onKeyPress(.downArrow) { moveTask(task, day: day, forward: true); return .handled }
             Button { if let plan = connection.plan { Task { try? await connection.setDone(task.id, done: !task.done, day: day.date, accountID: plan.accountID) } } } label: {
                 Image(systemName: task.done ? "checkmark.square.fill" : "square")
-                    .font(.system(size: 20, weight: .medium)).foregroundStyle(task.done ? Color.blue : Color.primary.opacity(0.8))
+                    .font(.system(size: 20, weight: .medium)).foregroundStyle(task.done ? Color.white : Color.white.opacity(0.9))
             }.buttonStyle(.plain).disabled(connection.working).accessibilityLabel(task.title + (task.done ? " 완료 취소" : " 완료"))
             VStack(alignment: .leading, spacing: 2) {
-                if let project = task.projectTitle {
+                if let project = task.projectTitle ?? task.parentTitle {
                     HStack(spacing: 4) {
-                        Circle().fill(Color(hue: (task.projectHue ?? 218) / 360, saturation: 0.5, brightness: 0.8)).frame(width: 5, height: 5)
-                        Text(project).font(.system(size: 10, weight: .medium)).lineLimit(1).foregroundStyle(.secondary)
+                        if task.projectTitle != nil { Circle().fill(Color(hue: (task.projectHue ?? 218) / 360, saturation: 0.5, brightness: 0.8)).frame(width: 5, height: 5) }
+                        Text(project).font(.system(size: 10, weight: .medium)).lineLimit(1).foregroundStyle(.secondary).help(project)
                     }
                 }
                 FlowTitle(text: task.title, size: 14, done: task.done, paused: !flow || dragging || reduceMotion)
@@ -206,8 +195,8 @@ struct DesktopCalendarView: View {
             ZStack(alignment: .topLeading) {
                 ForEach(Array(stride(from: ceil(startMinute / 60) * 60, through: min(1440, startMinute + 240), by: 60)), id: \.self) { minute in
                     HStack(spacing: 6) {
-                        Text(timeLabel(minute)).font(.system(size: 10)).monospacedDigit().foregroundStyle(.tertiary).frame(width: 30, alignment: .leading)
-                        Rectangle().fill(.primary.opacity(0.08)).frame(height: 0.5)
+                        Text(timeLabel(minute)).font(.system(size: 10)).monospacedDigit().foregroundStyle(.white.opacity(0.55)).frame(width: 30, alignment: .leading)
+                        Rectangle().fill(.white.opacity(0.12)).frame(height: 0.5)
                     }.offset(y: (minute - startMinute) * scale - 6)
                 }
                 ForEach(blocks) { block in
@@ -233,7 +222,7 @@ struct DesktopCalendarView: View {
                 }
                 let current = DaylightTimeGrid.minute(now, on: day.date)
                 if today && current >= startMinute && current <= startMinute + 240 {
-                    HStack(spacing: 0) { Circle().fill(.blue).frame(width: 5, height: 5); Rectangle().fill(.blue).frame(height: 1) }
+                    HStack(spacing: 0) { Circle().fill(.white).frame(width: 5, height: 5); Rectangle().fill(.white.opacity(0.85)).frame(height: 1) }
                         .offset(y: (current - startMinute) * scale - 2).allowsHitTesting(false)
                 }
             }
@@ -246,7 +235,7 @@ struct DesktopCalendarView: View {
     private func eventCard(_ event: DaylightCalendarEvent, subtitle: String, active: Bool) -> some View {
         GeometryReader { geometry in
             HStack(spacing: 0) {
-                RoundedRectangle(cornerRadius: 2).fill(.blue.opacity(0.75)).frame(width: 3)
+                RoundedRectangle(cornerRadius: 2).fill(.white.opacity(0.9)).frame(width: 3)
                 VStack(alignment: .leading, spacing: 3) {
                     FlowTitle(text: event.title, size: 12, paused: !flow || dragging || reduceMotion).frame(height: 17)
                     if geometry.size.height >= 40 {
@@ -256,8 +245,8 @@ struct DesktopCalendarView: View {
                 }.padding(.horizontal, 8).padding(.vertical, 6)
             }
         }
-        .background(.blue.opacity(0.065), in: RoundedRectangle(cornerRadius: 6))
-        .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(.blue.opacity(0.12)))
+        .background(.white.opacity(0.12), in: RoundedRectangle(cornerRadius: 6))
+        .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(.white.opacity(0.08)))
         .clipShape(RoundedRectangle(cornerRadius: 6))
         .opacity(active ? 0.25 : 1).help(event.title + " · " + subtitle + (event.canEdit == true ? " · 드래그로 이동" : " · 읽기 전용"))
         .accessibilityLabel(event.title + ", " + subtitle)
@@ -380,21 +369,3 @@ private struct FlowTitle: View {
     }
 }
 
-private struct CalendarGlass: NSViewRepresentable {
-    func makeNSView(context: Context) -> NSVisualEffectView {
-        let view = NSVisualEffectView()
-        view.material = .sidebar
-        view.blendingMode = .behindWindow
-        view.state = .active
-        DispatchQueue.main.async {
-            guard let window = view.window else { return }
-            window.isOpaque = false
-            window.backgroundColor = .clear
-            window.titlebarAppearsTransparent = true
-            window.isMovableByWindowBackground = false
-            window.setFrameAutosaveName("daylight.desktop.calendar")
-        }
-        return view
-    }
-    func updateNSView(_ nsView: NSVisualEffectView, context: Context) {}
-}

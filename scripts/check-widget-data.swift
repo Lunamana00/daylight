@@ -1,4 +1,5 @@
 import Foundation
+import CoreGraphics
 
 @main
 struct CheckWidgetData {
@@ -38,6 +39,12 @@ struct CheckWidgetData {
         precondition(DaylightTimeGrid.snappedMinute(1450) == 1425)
         let allDay = DaylightCalendarEvent(id: "all", title: "All day", date: "2026-11-20", endDate: "2026-11-21")
         precondition(allDay.moveStart == "2026-11-20" && allDay.moveEnd == "2026-11-22")
+        let screen = CGRect(x: 0, y: 0, width: 1440, height: 900)
+        let widgetFrame = CGRect(x: 24, y: 376, width: 1000, height: 500)
+        let resized = DaylightDesktopLayout.resized(widgetFrame, dx: 200, dy: -100, in: screen)
+        precondition(resized.width == 1200 && resized.height == 600 && resized.maxY == widgetFrame.maxY)
+        precondition(DaylightDesktopLayout.resized(widgetFrame, dx: -1000, dy: 1000, in: screen).size == DaylightDesktopLayout.minimum)
+        precondition(screen.contains(DaylightDesktopLayout.fitted(CGRect(x: 2000, y: -500, width: 1800, height: 1000), in: screen)))
         print("Widget data checks passed: old cache, weekly data, empty-cache fallback and weekday labels.")
     }
 }

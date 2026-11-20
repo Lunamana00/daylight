@@ -92,8 +92,8 @@ To build the app from source:
 
 1. Install Xcode 26 or later. Open `macos/Daylight.xcodeproj` in Xcode.
 2. Select the same Apple signing team for **Daylight** and **DaylightWidget**. Set `DAYLIGHT_SERVER_URL` in the **Daylight** build settings to the Google Worker origin.
-3. Run **Daylight**. Select **Google로 로그인** and use an invited account. The app opens a 1120 by 700 calendar window. Drag the window edges to change its size.
-4. Open **Edit Widgets** on the desktop. Add **daylight 주간 달력**. Select the extra-large size for today and the next three days. Select **Clear** in the Mac appearance settings for the system glass style.
+3. Run **Daylight**. Select **Google로 로그인** and use an invited account. The app places a 1000 by 500 calendar on the desktop, below normal app windows. Drag the date area to move it. Drag the lower-right handle to change its size. The minimum size is 720 by 360. The app saves the frame. It uses a clear glass background and a menu bar icon.
+4. To add the separate system widget, open **Edit Widgets** on the desktop. Add **daylight 주간 달력**. Select the extra-large size for today and the next three days. Select **Clear** in the Mac appearance settings for the system glass style.
 
 The widget supports medium, large, and extra-large sizes. The extra-large size shows a four-day time grid. Today has a wider column. Tasks and all-day events appear above the grid. Timed events use their Google start and end times. Use the time arrows to show other hours. The other sizes show a week strip and the selected day's details. The app reads this week and at least three days after today through `/api/planner?view=widget`. Each day contains only its scheduled tasks and the owner's Google events. Titles wrap. Page buttons show remaining items. Today’s tasks support completion changes. Other dates open the web planner. The header shows the full completion count for today. Right-click the widget and select **Edit Widget** to change **Google 일정 표시**. The Mac app holds the session in Keychain. A completion check runs in the Mac app and changes the same task on the Worker.
 
