@@ -6,7 +6,7 @@ export type Task = { id: string; ownerId: string; date: string; endDate: string 
 export type BacklogItem = { id: string; title: string; sortOrder: number; taskId: string | null; taskTitle: string | null; taskDate: string | null; taskEndDate: string | null; projectId: string | null; projectTitle: string | null; projectHue: number | null; subtask?: number; done?: number };
 export type TaskProject = { id: string; title: string };
 export type Note = { ownerId: string; date: string; content: string; updatedAt: string; ownerName: string };
-export type Milestone = { ownerId: string; calendarId: string; eventId: string; title: string; date: string; url: string | null; ownerName: string; sourceName: string; syncedAt: string };
+export type Milestone = { ownerId: string; calendarId: string; eventId: string; title: string; date: string; url: string | null; ownerName: string; sourceName: string; syncedAt: string; startAt?: string | null; endAt?: string | null; endDate?: string | null };
 export type Source = { ownerId: string; calendarId: string; name: string; syncedAt: string; ownerName: string };
 export type DayData = { date: string; me: Member; members: Member[]; tasks: Task[]; projects?: TaskProject[]; notes: Note[]; milestones: Milestone[]; sources: Source[]; calendarSync?: Array<{ calendarId: string; enabled: boolean; canManage: boolean; error: string | null }> };
 export type CalendarData = { from: string; to: string; tasks: Task[]; milestones: Milestone[] };
@@ -141,22 +141,30 @@ function widgetTasks(tasks: Task[], ownerId: string, date: string) {
     }))
   ).sort((a, b) => Number(a.done) - Number(b.done));
 }
+export function calendarSyncMessage(data: DayData) {
+  if (!data.calendarSync) return null;
+  const connections = data.sources.filter(source => source.ownerId === data.me.id)
+    .map(source => data.calendarSync!.find(connection => connection.calendarId === source.calendarId));
+  if (connections.some(connection => !connection?.enabled || connection.error === "reconnect")) return "Google 캘린더 다시 연결 필요";
+  if (connections.some(connection => connection?.error)) return "캘린더 동기화 지연 · 저장된 일정 표시 중";
+  return null;
+}
 export function widgetPlan(data: DayData) {
   const items = widgetTasks(data.tasks, data.me.id, data.date);
   const next = data.milestones[0];
   return {
-    date: data.date, accountID: data.me.id,
+    date: data.date, accountID: data.me.id, calendarMessage: calendarSyncMessage(data),
     tasks: items.slice(0, 4), taskCount: items.length, completedCount: items.filter(task => task.done).length,
     nextMilestone: next ? { title: next.title, date: next.date } : null,
   };
 }
 export function widgetWeekPlan(data: DayData, calendar: CalendarData) {
-  const days = Array.from({ length: 7 }, (_, index) => {
+  const days = Array.from({ length: (Date.parse(calendar.to) - Date.parse(calendar.from)) / 86_400_000 + 1 }, (_, index) => {
     const date = addDays(calendar.from, index);
     return {
       date, tasks: widgetTasks(calendar.tasks, data.me.id, date),
-      events: calendar.milestones.filter(event => event.ownerId === data.me.id && event.date === date)
-        .map(event => ({ id: milestoneKey(event), title: event.title, source: event.sourceName })),
+      events: calendar.milestones.filter(event => event.ownerId === data.me.id && event.date <= date && (event.endDate ?? event.date) >= date)
+        .map(event => ({ id: milestoneKey(event), title: event.title, source: event.sourceName, startAt: event.startAt ?? null, endAt: event.endAt ?? null })),
     };
   });
   return { ...widgetPlan(data), tasks: widgetTasks(data.tasks, data.me.id, data.date), days };
@@ -164,7 +172,7 @@ export function widgetWeekPlan(data: DayData, calendar: CalendarData) {
 export async function listMilestones(db: D1Database, from: string, to: string, ownerId?: string) {
   day(from); day(to);
   if (to < from || to > addDays(from, 366)) throw new PlannerError("마일스톤 조회 기간은 1년 이내로 선택해주세요.");
-  const result = await db.prepare("SELECT m.owner_id AS ownerId,m.calendar_id AS calendarId,m.event_id AS eventId,m.title,m.date,m.url,m.synced_at AS syncedAt,p.name AS ownerName,s.name AS sourceName FROM milestones m JOIN members p ON p.id=m.owner_id JOIN calendar_sources s ON s.calendar_id=m.calendar_id AND (? IS NULL OR s.owner_id=m.owner_id) LEFT JOIN milestone_order o ON o.calendar_id=m.calendar_id AND o.event_id=m.event_id WHERE m.date>=? AND m.date<=? AND (? IS NULL OR m.owner_id=?) ORDER BY o.position IS NULL,o.position,m.date,m.title,m.calendar_id,m.event_id LIMIT 1000").bind(ownerId ?? null, from, to, ownerId ?? null, ownerId ?? null).all<Milestone>();
+  const result = await db.prepare("SELECT m.owner_id AS ownerId,m.calendar_id AS calendarId,m.event_id AS eventId,m.title,m.date,m.url,m.start_at AS startAt,m.end_at AS endAt,m.end_date AS endDate,m.synced_at AS syncedAt,p.name AS ownerName,s.name AS sourceName FROM milestones m JOIN members p ON p.id=m.owner_id JOIN calendar_sources s ON s.calendar_id=m.calendar_id AND (? IS NULL OR s.owner_id=m.owner_id) LEFT JOIN milestone_order o ON o.calendar_id=m.calendar_id AND o.event_id=m.event_id WHERE COALESCE(m.end_date,m.date)>=? AND m.date<=? AND (? IS NULL OR m.owner_id=?) ORDER BY o.position IS NULL,o.position,m.date,m.start_at,m.title,m.calendar_id,m.event_id LIMIT 1000").bind(ownerId ?? null, from, to, ownerId ?? null, ownerId ?? null).all<Milestone>();
   return result.results;
 }
 export async function readDay(db: D1Database, user: Identity, date: string, personalCalendars = false): Promise<DayData> {
@@ -191,8 +199,9 @@ export function weekRange(date: string) {
   const from = addDays(date, -offset), to = addDays(date, 6 - offset);
   return { from: from < "2000-01-01" ? "2000-01-01" : from, to: to > "2100-12-31" ? "2100-12-31" : to };
 }
-export async function readCalendar(db: D1Database, user: Identity, date: string, view: "week" | "month" = "month"): Promise<CalendarData> {
-  const { from, to } = view === "week" ? weekRange(date) : monthRange(date);
+export async function readCalendar(db: D1Database, user: Identity, date: string, view: "week" | "month" | "widget" = "month"): Promise<CalendarData> {
+  const range = view === "month" ? monthRange(date) : weekRange(date);
+  const from = range.from, to = view === "widget" && addDays(date, 3) > range.to ? addDays(date, 3) : range.to;
   const [tasks, milestones] = await Promise.all([
     readTasks(db, from, to, user.userId),
     listMilestones(db, from, to, user.userId),
@@ -373,22 +382,30 @@ export async function syncMilestones(db: D1Database, user: Identity, input: Reco
     const item = event as Record<string, unknown>;
     const eventId = text(item.eventId, "일정 ID", 1024);
     const date = day(item.date);
-    if (date < from || date > to || seen.has(eventId)) throw new PlannerError("중복 일정이 있거나 동기화 기간에 맞지 않습니다.");
+    const endDate = item.endDate == null ? date : day(item.endDate);
+    let startAt: string | null = null, endAt: string | null = null;
+    if (item.startAt != null || item.endAt != null) {
+      const timestamp = (value: unknown) => typeof value === "string" && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(value) && Number.isFinite(Date.parse(value));
+      if (!timestamp(item.startAt) || !timestamp(item.endAt) || Date.parse(item.endAt as string) <= Date.parse(item.startAt as string)) throw new PlannerError("일정의 시작·종료 시간이 올바르지 않아요.");
+      startAt = new Date(item.startAt as string).toISOString(); endAt = new Date(item.endAt as string).toISOString();
+      if (today(new Date(startAt)) !== date || today(new Date(Date.parse(endAt) - 1)) !== endDate) throw new PlannerError("일정의 날짜와 시간이 맞지 않아요.");
+    }
+    if (endDate < date || endDate < from || date > to || seen.has(eventId)) throw new PlannerError("중복 일정이 있거나 동기화 기간에 맞지 않습니다.");
     seen.add(eventId);
     let url: string | null = null;
     if (item.url) {
       try { const parsed = new URL(text(item.url, "일정 주소", 4096)); if (parsed.protocol !== "https:" || !["calendar.google.com", "www.google.com"].includes(parsed.hostname)) throw new Error(); url = parsed.href; }
       catch { throw new PlannerError("Google 캘린더 일정 주소만 사용할 수 있어요."); }
     }
-    return { eventId, date, title: text(item.title, "마일스톤", 240), url };
+    return { eventId, date, endDate, startAt, endAt, title: text(item.title, "마일스톤", 240), url };
   });
   await ensureMember(db, user);
   const now = new Date().toISOString();
   // D1 batch is atomic: failed insertion never erases the previous snapshot.
   await db.batch([
     db.prepare("INSERT INTO calendar_sources (owner_id,calendar_id,name,synced_at) VALUES (?,?,?,?) ON CONFLICT DO UPDATE SET owner_id=excluded.owner_id,name=excluded.name,synced_at=excluded.synced_at").bind(user.userId, calendarId, name, now),
-    db.prepare("DELETE FROM milestones WHERE calendar_id=? AND date>=? AND date<=? AND (? IS NULL OR owner_id=?)").bind(calendarId, from, to, personalCalendar ? user.userId : null, personalCalendar ? user.userId : null),
-    ...events.map(event => db.prepare("INSERT INTO milestones (owner_id,calendar_id,event_id,title,date,url,synced_at) VALUES (?,?,?,?,?,?,?) ON CONFLICT DO UPDATE SET owner_id=excluded.owner_id,title=excluded.title,date=excluded.date,url=excluded.url,synced_at=excluded.synced_at").bind(user.userId, calendarId, event.eventId, event.title, event.date, event.url, now)),
+    db.prepare("DELETE FROM milestones WHERE calendar_id=? AND COALESCE(end_date,date)>=? AND date<=? AND (? IS NULL OR owner_id=?)").bind(calendarId, from, to, personalCalendar ? user.userId : null, personalCalendar ? user.userId : null),
+    ...events.map(event => db.prepare("INSERT INTO milestones (owner_id,calendar_id,event_id,title,date,url,synced_at,start_at,end_at,end_date) VALUES (?,?,?,?,?,?,?,?,?,?) ON CONFLICT DO UPDATE SET owner_id=excluded.owner_id,title=excluded.title,date=excluded.date,url=excluded.url,synced_at=excluded.synced_at,start_at=excluded.start_at,end_at=excluded.end_at,end_date=excluded.end_date").bind(user.userId, calendarId, event.eventId, event.title, event.date, event.url, now, event.startAt, event.endAt, event.endDate)),
   ]);
   return { count: events.length, from, to, syncedAt: now, message: "팀 공통 마일스톤을 갱신했습니다. 일일 할 일은 변경하지 않았습니다." };
 }

@@ -62,6 +62,73 @@ struct DaylightCalendarEvent: Codable, Equatable, Identifiable {
     let id: String
     let title: String
     var source: String? = nil
+    var startAt: String? = nil
+    var endAt: String? = nil
+
+    func minutes(on day: String) -> (start: Double, end: Double)? {
+        guard let startAt, let endAt, let start = DaylightTimeGrid.instant(startAt),
+              let end = DaylightTimeGrid.instant(endAt), let midnight = DaylightTimeGrid.instant(day + "T00:00:00+09:00"),
+              end > start else { return nil }
+        let from = max(0, start.timeIntervalSince(midnight) / 60)
+        let to = min(1440, end.timeIntervalSince(midnight) / 60)
+        return to > from ? (from, to) : nil
+    }
+}
+
+struct DaylightTimeBlock: Identifiable {
+    let event: DaylightCalendarEvent
+    let start: Double
+    let end: Double
+    var column = 0
+    var columns = 1
+    var id: String { event.id }
+}
+
+enum DaylightTimeGrid {
+    static func instant(_ value: String) -> Date? {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let date = formatter.date(from: value) { return date }
+        formatter.formatOptions = [.withInternetDateTime]
+        return formatter.date(from: value)
+    }
+
+    static func minute(_ date: Date, on day: String) -> Double {
+        guard let midnight = instant(day + "T00:00:00+09:00") else { return 0 }
+        return date.timeIntervalSince(midnight) / 60
+    }
+
+    static func initialHour(days: [DaylightCalendarDay], now: Date) -> Int {
+        let today = Daylight.dayKey(now), current = minute(now, on: today)
+        let starts = days.flatMap { day in
+            day.events.compactMap { event -> Double? in
+                guard let time = event.minutes(on: day.date), day.date > today || time.end > current else { return nil }
+                return day.date == today ? max(current, time.start) : time.start
+            }
+        }
+        return min(18, max(0, Int(min(current, starts.min() ?? current) / 60) - 1))
+    }
+
+    static func blocks(_ events: [DaylightCalendarEvent], day: String, hour: Int, minimumMinutes: Double) -> [DaylightTimeBlock] {
+        let from = Double(hour * 60), to = from + 360
+        var blocks = events.compactMap { event -> DaylightTimeBlock? in
+            guard let time = event.minutes(on: day), time.end > from, time.start < to else { return nil }
+            let start = max(from, time.start)
+            return DaylightTimeBlock(event: event, start: start, end: min(to, max(time.end, start + minimumMinutes)))
+        }.sorted { $0.start == $1.start ? $0.id < $1.id : $0.start < $1.start }
+        var groupStart = 0, occupied: [Double] = []
+        for index in blocks.indices {
+            if !occupied.isEmpty && occupied.allSatisfy({ $0 <= blocks[index].start }) {
+                for previous in groupStart..<index { blocks[previous].columns = occupied.count }
+                groupStart = index; occupied = []
+            }
+            let column = occupied.firstIndex(where: { $0 <= blocks[index].start }) ?? occupied.count
+            if column == occupied.count { occupied.append(blocks[index].end) } else { occupied[column] = blocks[index].end }
+            blocks[index].column = column
+        }
+        for index in groupStart..<blocks.count { blocks[index].columns = occupied.count }
+        return blocks
+    }
 }
 
 struct DaylightCalendarDay: Codable, Equatable, Identifiable {
@@ -80,6 +147,7 @@ struct DaylightSnapshot: Codable, Equatable {
     var taskCount: Int? = nil
     var completedCount: Int? = nil
     var days: [DaylightCalendarDay]? = nil
+    var calendarMessage: String? = nil
 
     var total: Int { taskCount ?? tasks.count }
     var completed: Int { completedCount ?? tasks.filter(\.done).count }
@@ -114,6 +182,15 @@ enum DaylightCache {
     }
 
     static var selectedDate: String? { preferences?.string(forKey: "widget.selectedDate") }
+    static var calendarHour: Int? {
+        guard preferences?.string(forKey: "widget.hourDay") == Daylight.dayKey(),
+              let hour = preferences?.object(forKey: "widget.hour") as? Int else { return nil }
+        return min(18, max(0, hour))
+    }
+    static func selectHour(_ hour: Int) {
+        preferences?.set(Daylight.dayKey(), forKey: "widget.hourDay")
+        preferences?.set(min(18, max(0, hour)), forKey: "widget.hour")
+    }
     static func offset(for day: String) -> Int { max(0, preferences?.integer(forKey: "widget.offset.\(day)") ?? 0) }
     static func select(_ day: String, offset: Int) {
         preferences?.set(day, forKey: "widget.selectedDate")

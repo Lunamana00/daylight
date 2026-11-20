@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
-import { CalendarDays, Check, ChevronLeft, ChevronRight, ExternalLink, Pencil, Square } from "lucide-react";
+import { CalendarDays, Check, ChevronLeft, ChevronRight, ExternalLink, Pencil, RefreshCw, Square } from "lucide-react";
 import { ko } from "react-day-picker/locale";
 import { Calendar, CalendarDayButton } from "./ui/calendar";
-import { addDays, calendarProjects, calendarTaskGroups, calendarTaskLanes, calendarWeekLayout, calendarWeekOffsets, milestoneKey, monthRange, taskHue, today, weekRange } from "../lib/planner-core";
+import { addDays, calendarSyncMessage, calendarProjects, calendarTaskGroups, calendarTaskLanes, calendarWeekLayout, calendarWeekOffsets, milestoneKey, monthRange, taskHue, today, weekRange } from "../lib/planner-core";
 import type { CalendarData, DayData, Task } from "../lib/planner-core";
 
 const calendarDate = (value: string) => new Date(value + "T00:00:00+09:00");
@@ -39,8 +39,9 @@ export function PlannerCalendar({ date, data, busy, onSelectDate, onManage, onCh
     return () => { active = false; };
   }, [from, to, view, data]);
   const current = saved?.from === from && saved.to === to ? saved : null;
+  const syncMessage = calendarSyncMessage(data);
   const projectGroups = calendarProjects(current?.tasks ?? []);
-  const selectedEvents = current?.milestones.filter(item => item.date === date) ?? [];
+  const selectedEvents = current?.milestones.filter(item => item.date <= date && (item.endDate ?? item.date) >= date) ?? [];
   const offset = (new Date(date + "T00:00:00Z").getUTCDay() + 6) % 7;
   const week = Array.from({ length: 7 }, (_, i) => addDays(date, i - offset));
   useLayoutEffect(() => {
@@ -67,8 +68,9 @@ export function PlannerCalendar({ date, data, busy, onSelectDate, onManage, onCh
   return <section className="card planner-calendar-card" aria-label="내 일정 달력" aria-busy={loading}>
     <div className="calendar-toolbar">
       <div className="calendar-legend"><span><Square size={12} />내 할 일</span><span><CalendarDays size={12} />Google 일정</span></div>
-      <div className="calendar-view-controls"><div className="calendar-view-switch" role="group" aria-label="달력 보기">{(["week", "month"] as const).map(mode => <button key={mode} aria-pressed={view === mode} disabled={busy} onClick={() => setView(mode)}>{mode === "week" ? "주간" : "월간"}</button>)}</div><button className="text-button" onClick={onManage}>캘린더 관리</button></div>
+      <div className="calendar-view-controls">{data.calendarSync?.some(item => item.enabled) && <button className="icon-button" aria-label="Google 캘린더 지금 동기화" disabled={busy} onClick={() => void onChange({ op: "calendar.sync" })}><RefreshCw size={15} /></button>}<div className="calendar-view-switch" role="group" aria-label="달력 보기">{(["week", "month"] as const).map(mode => <button key={mode} aria-pressed={view === mode} disabled={busy} onClick={() => setView(mode)}>{mode === "week" ? "주간" : "월간"}</button>)}</div><button className="text-button" onClick={onManage}>캘린더 관리</button></div>
     </div>
+    {syncMessage && <div className="calendar-sync-notice" role="status"><span>{syncMessage}</span><button className="text-button" onClick={onManage}>연결 관리</button></div>}
     {error && <p className="error-banner" role="alert">{error}</p>}
     {view === "week" ? <>
       <div className="calendar-week-heading">
@@ -117,7 +119,7 @@ export function PlannerCalendar({ date, data, busy, onSelectDate, onManage, onCh
           </section>;
         })}</div>
         <div className="calendar-week-columns">{week.map(key => {
-          const events = current?.milestones.filter(item => item.date === key) ?? [];
+          const events = current?.milestones.filter(item => item.date <= key && (item.endDate ?? item.date) >= key) ?? [];
           return <section key={key} className={`calendar-week-column ${key === date ? "selected" : ""}`} aria-label={dateLabel(key)}>
             {events.length > 0 && <div className="calendar-week-events">{events.map(item => <div className="calendar-week-event" key={milestoneKey(item)}><CalendarDays size={12} /><div>{item.url ? <a href={item.url} target="_blank" rel="noreferrer">{item.title}</a> : <span>{item.title}</span>}<small>{item.sourceName}</small></div></div>)}</div>}
           </section>;
@@ -146,7 +148,7 @@ export function PlannerCalendar({ date, data, busy, onSelectDate, onManage, onCh
         const tasks = current?.tasks.filter(task => task.date <= key && (task.endDate ?? task.date) >= key) ?? [];
         const groups = calendarTaskGroups(tasks, key);
         const dailyCount = groups.reduce((count, group) => count + group.items.length, 0);
-        const events = current?.milestones.filter(item => item.date === key) ?? [];
+        const events = current?.milestones.filter(item => item.date <= key && (item.endDate ?? item.date) >= key) ?? [];
         const weekday = (new Date(key + "T00:00:00Z").getUTCDay() + 6) % 7;
         const from = current && current.from > addDays(key, -weekday) ? current.from : addDays(key, -weekday);
         const to = current && current.to < addDays(key, 6 - weekday) ? current.to : addDays(key, 6 - weekday);

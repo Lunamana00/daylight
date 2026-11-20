@@ -1,4 +1,4 @@
-import { addDays, day, PlannerError, syncMilestones, today } from "./planner-core";
+import { addDays, day, PlannerError, syncMilestones, today, weekRange } from "./planner-core";
 import type { Identity } from "./planner-core";
 
 export const calendarListScope = "https://www.googleapis.com/auth/calendar.calendarlist.readonly";
@@ -19,6 +19,7 @@ type CalendarEvent = {
   visibility?: string;
   htmlLink?: string;
   start?: { date?: string; dateTime?: string };
+  end?: { date?: string; dateTime?: string };
 };
 type CalendarPage<Item> = { items?: Item[]; nextPageToken?: string };
 
@@ -71,13 +72,13 @@ export async function selectGoogleCalendars(values: unknown[], accessToken: stri
 }
 
 export async function syncGoogleCalendar(db: D1Database, user: Identity, id: string, accessToken: string) {
-  const from = today(), to = addDays(from, 90);
+  const from = weekRange(today()).from, to = addDays(today(), 90);
   const params = new URLSearchParams({
     timeMin: `${from}T00:00:00+09:00`, timeMax: `${addDays(to, 1)}T00:00:00+09:00`, timeZone: "Asia/Seoul",
     singleEvents: "true", eventTypes: "default", maxResults: "500",
-    fields: "nextPageToken,summary,accessRole,items(id,summary,status,visibility,htmlLink,start(date,dateTime))",
+    fields: "nextPageToken,summary,accessRole,items(id,summary,status,visibility,htmlLink,start(date,dateTime),end(date,dateTime))",
   });
-  const events: Array<{ eventId: string; title: string; date: string; url?: string }> = [];
+  const events: Array<{ eventId: string; title: string; date: string; endDate: string; startAt?: string; endAt?: string; url?: string }> = [];
   for (let page = 0; page < 20; page++) {
     const result = await googleCalendar<CalendarPage<CalendarEvent> & { summary?: string; accessRole?: string }>(
       `calendars/${encodeURIComponent(id)}/events`, accessToken, params,
@@ -91,8 +92,12 @@ export async function syncGoogleCalendar(db: D1Database, user: Identity, id: str
         throw new PlannerError("Google에서 일정 정보를 끝까지 읽지 못했어요. 다시 시도해 주세요.", 502);
       }
       const date = day(event.start.date ?? today(new Date(event.start.dateTime!)));
-      if (date < from || date > to) continue;
-      events.push({ eventId: event.id, title: title.slice(0, 240), date, url: event.htmlLink });
+      // Google end dates are exclusive, including midnight ends of timed events.
+      const endDate = event.end?.date ? addDays(day(event.end.date), -1)
+        : event.end?.dateTime ? day(today(new Date(Date.parse(event.end.dateTime) - 1))) : date;
+      if (endDate < from || date > to) continue;
+      events.push({ eventId: event.id, title: title.slice(0, 240), date, endDate,
+        startAt: event.start.dateTime, endAt: event.end?.dateTime, url: event.htmlLink });
       if (events.length > 500) throw new PlannerError("앞으로 90일의 일정이 500개를 넘어서 동기화할 수 없어요.");
     }
     if (!result.nextPageToken) {

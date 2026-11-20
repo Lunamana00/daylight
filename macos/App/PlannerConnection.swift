@@ -185,7 +185,7 @@ final class PlannerConnection: NSObject, ObservableObject, ASWebAuthenticationPr
             try DaylightCache.write(snapshot)
             WidgetCenter.shared.reloadTimelines(ofKind: Daylight.widgetKind)
         }
-        status = "위젯 연결됨"
+        status = snapshot.calendarMessage ?? "위젯 연결됨"
     }
 
     private func forgetLogin() {

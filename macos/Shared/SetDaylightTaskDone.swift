@@ -1,6 +1,22 @@
 import AppIntents
 import WidgetKit
 
+struct SelectDaylightCalendarHour: AppIntent {
+    static let title: LocalizedStringResource = "daylight 시간대 보기"
+    static let isDiscoverable = false
+    static var supportedModes: IntentModes { [.background, .foreground(.dynamic)] }
+    @available(macOS 27.0, *)
+    static var allowedExecutionTargets: IntentExecutionTargets { .main }
+    @Parameter(title: "시작 시간") var hour: Int
+    init() {}
+    init(hour: Int) { self.hour = hour }
+    func perform() async throws -> IntentResultContainer<Never, Never, Never, Never> {
+        DaylightCache.selectHour(hour)
+        WidgetCenter.shared.reloadTimelines(ofKind: Daylight.widgetKind)
+        return .result()
+    }
+}
+
 struct SelectDaylightWidgetDay: AppIntent {
     static let title: LocalizedStringResource = "daylight 날짜 보기"
     static let isDiscoverable = false

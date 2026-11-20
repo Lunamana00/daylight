@@ -15,9 +15,12 @@ CREATE TABLE __personal_milestones (
   date TEXT NOT NULL,
   url TEXT,
   synced_at TEXT NOT NULL,
+  start_at TEXT,
+  end_at TEXT,
+  end_date TEXT,
   PRIMARY KEY (owner_id, calendar_id, event_id)
 );
-INSERT INTO __personal_milestones SELECT owner_id,calendar_id,event_id,title,date,url,synced_at FROM milestones;
+INSERT INTO __personal_milestones SELECT owner_id,calendar_id,event_id,title,date,url,synced_at,start_at,end_at,end_date FROM milestones;
 
 CREATE TABLE __personal_calendar_connections (
   calendar_id TEXT NOT NULL,

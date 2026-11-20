@@ -130,6 +130,9 @@ export async function syncSavedGoogleCalendars(env: Cloudflare.Env, ownerId?: st
     try { await syncSavedGoogleCalendar(env, calendar_id, owner_id); }
     catch (error) { failure ??= error; }
   }
+  if (ownerId && await env.DB.prepare("SELECT 1 FROM calendar_sources s LEFT JOIN daylight_google_calendar_connections c ON c.owner_id=s.owner_id AND c.calendar_id=s.calendar_id WHERE s.owner_id=? AND COALESCE(c.enabled,0)=0 LIMIT 1").bind(ownerId).first()) {
+    failure ??= new PlannerError("자동 동기화가 꺼진 캘린더가 있어요. 설정에서 Google 캘린더를 다시 연결해 주세요.", 428);
+  }
   if (failure) throw failure;
 }
 

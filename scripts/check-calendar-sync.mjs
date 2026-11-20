@@ -13,7 +13,7 @@ function moduleURL(path, imports = {}) {
 }
 const coreURL = moduleURL('../lib/planner-core.ts');
 const calendarURL = moduleURL('../lib/google-calendar.ts', { './planner-core': coreURL });
-const { change, readDay, syncMilestones, today } = await import(coreURL);
+const { change, readDay, syncMilestones, today, addDays, readCalendar, widgetWeekPlan, calendarSyncMessage } = await import(coreURL);
 const { handleGoogleAuth, readCalendarGrant, syncSavedGoogleCalendars, calendarSyncStatus, handleInvitations, getGoogleSession } = await import(moduleURL('../lib/google-auth.ts', {
   './planner-core': coreURL, './google-calendar': calendarURL,
 }));
@@ -27,7 +27,7 @@ for (const file of ['google-auth.sql', 'google-calendar.sql', 'google-calendar-a
 }
 sqlite.exec(`INSERT INTO members VALUES ('migration', 'Saved member', 'saved@example.test', '2026-01-01');
   INSERT INTO calendar_sources VALUES ('migration', 'saved@example.test', 'Saved calendar', '2026-01-01');
-  INSERT INTO milestones VALUES ('migration', 'saved@example.test', 'saved-event', 'Saved event', '2026-01-01', NULL, '2026-01-01');
+  INSERT INTO milestones (owner_id,calendar_id,event_id,title,date,url,synced_at) VALUES ('migration', 'saved@example.test', 'saved-event', 'Saved event', '2026-01-01', NULL, '2026-01-01');
   INSERT INTO milestone_order VALUES ('saved@example.test', 'saved-event', 7);
   INSERT INTO daylight_google_calendar_connections (calendar_id,owner_id,google_sub,email,refresh_token) VALUES ('saved@example.test', 'migration', 'saved-subject', 'saved@example.test', 'encrypted-value')`);
 const beforeMigration = ['calendar_sources', 'milestones', 'milestone_order', 'daylight_google_calendar_connections'].map(table => sqlite.prepare('SELECT * FROM ' + table).all());
@@ -70,6 +70,7 @@ const nonce = sqlite.prepare('SELECT nonce FROM daylight_google_flows WHERE stat
 const calendarIDs = ['team-one@example.test', 'team-two@example.test'];
 let failingCalendar = null;
 let eventVersion = 1;
+let extraEvents = [];
 let calls = 0;
 let loginClaims = null;
 const originalFetch = globalThis.fetch;
@@ -90,7 +91,7 @@ globalThis.fetch = async (input, options) => {
   assert.ok(calendarIDs.includes(id), 'Only selected calendars can be read');
   if (id === failingCalendar) return new Response('', { status: 503 });
   return Response.json({ summary: id, accessRole: 'reader', items: [{ id: 'event', summary: 'Milestone ' + eventVersion,
-    visibility: 'private', start: { date: today() } }] });
+    visibility: 'private', start: { date: today() } }, ...extraEvents] });
 };
 try {
   const callback = await handleGoogleAuth(new Request(origin + '/auth/google/callback?state=' + state + '&code=test-code', {
@@ -193,6 +194,33 @@ try {
   assert.equal(sqlite.prepare('SELECT enabled FROM daylight_google_calendar_connections WHERE owner_id=?').get(other.userId).enabled, 1,
     'Manual sync cannot use another person’s connection');
   assert.equal((await readDay(db, other, today(), true)).milestones[0].title, 'Other private event');
+  const yesterday = addDays(today(), -1), tomorrow = addDays(today(), 1);
+  extraEvents = [
+    { id: 'timed', summary: 'Timed event', start: { dateTime: today() + 'T15:30:00+09:00' }, end: { dateTime: today() + 'T17:00:00+09:00' } },
+    { id: 'overnight', summary: 'Overnight', start: { dateTime: yesterday + 'T23:00:00+09:00' }, end: { dateTime: today() + 'T01:00:00+09:00' } },
+    { id: 'all-day', summary: 'All day', start: { date: today() }, end: { date: tomorrow } },
+  ];
+  await syncSavedGoogleCalendars(env, account.userId);
+  data = await readDay(db, account, today(), true);
+  const timed = data.milestones.find(event => event.eventId === 'timed');
+  assert.equal(timed.startAt, today() + 'T06:30:00.000Z');
+  assert.equal(timed.endAt, today() + 'T08:00:00.000Z');
+  assert.equal(data.milestones.find(event => event.eventId === 'all-day').endDate, today(), 'All-day end is exclusive');
+  assert.equal(data.milestones.find(event => event.eventId === 'overnight').endDate, today());
+  const widget = widgetWeekPlan(data, await readCalendar(db, account, today(), 'widget'));
+  assert.ok(widget.days.find(day => day.date === today()).events.some(event => event.id.includes('overnight')));
+  assert.equal((await readCalendar(db, account, '2026-11-20', 'widget')).to, '2026-11-23', 'Friday widget includes Monday');
+  extraEvents = [{ ...extraEvents[0], start: { dateTime: tomorrow + 'T15:30:00+09:00' }, end: { dateTime: tomorrow + 'T17:00:00+09:00' } }];
+  await syncSavedGoogleCalendars(env, account.userId);
+  data = await readDay(db, account, today(), true);
+  assert.equal(data.milestones.find(event => event.eventId === 'timed').date, tomorrow, 'Moved events replace their old date');
+  assert.ok(!data.milestones.some(event => event.eventId === 'overnight'), 'Deleted events leave the snapshot');
+  sqlite.prepare('UPDATE daylight_google_calendar_connections SET enabled=0 WHERE owner_id=?').run(account.userId);
+  await assert.rejects(syncSavedGoogleCalendars(env, account.userId), error => error.status === 428, 'Disabled calendars cannot report a successful refresh');
+  data.calendarSync = await calendarSyncStatus(env, account.userId);
+  assert.match(calendarSyncMessage(data), /다시 연결/);
+  assert.match(widgetWeekPlan(data, await readCalendar(db, account, today(), 'widget')).calendarMessage, /다시 연결/);
+  sqlite.prepare('UPDATE daylight_google_calendar_connections SET enabled=1 WHERE owner_id=?').run(account.userId);
   sqlite.exec('UPDATE daylight_google_calendar_connections SET locked_until=9999999999');
   const previousCalls = calls;
   await syncSavedGoogleCalendars(env);

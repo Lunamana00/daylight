@@ -55,7 +55,7 @@ To use daylight invitations without a separate Google test user list, publish th
 
 1. Enable Google Calendar API in the Google Cloud project. If the OAuth app is in Testing, add the Google account as a test user.
 2. Open **설정** in daylight. Select **Google 캘린더 선택**. Grant read access and background access in Google.
-3. Select up to 20 calendars. Select **선택한 캘린더 자동 동기화** to import the next 90 days. Only your account can read these events in daylight.
+3. Select up to 20 calendars. Select **선택한 캘린더 자동 동기화** to import this week and the next 90 days. Only your account can read these events in daylight.
 4. The server updates the selected calendars every five minutes. Select **지금 동기화** on the web or the refresh button in the Mac widget for an immediate update.
 5. Use **캘린더 선택·다시 연결** to change the selected calendars. Clear a checkbox or select **자동 동기화 해제** to stop updates for a calendar. Imported events remain in daylight. Only the account that connected a calendar can change its connection.
 
@@ -84,13 +84,13 @@ To build the app from source:
 1. Install Xcode 26 or later. Open `macos/Daylight.xcodeproj` in Xcode.
 2. Select the same Apple signing team for **Daylight** and **DaylightWidget**. Set `DAYLIGHT_SERVER_URL` in the **Daylight** build settings to the Google Worker origin.
 3. Run **Daylight**. Select **Google로 로그인** and use an invited account.
-4. Open **Edit Widgets** on the desktop. Add **daylight 주간 달력**. Select the extra-large size for seven day columns. Select **Clear** in the Mac appearance settings for the system glass style.
+4. Open **Edit Widgets** on the desktop. Add **daylight 주간 달력**. Select the extra-large size for today and the next three days. Select **Clear** in the Mac appearance settings for the system glass style.
 
-The widget supports medium, large, and extra-large sizes. The extra-large size shows the week in seven columns. The other sizes show a week strip and the selected day's details. The app reads the full week through `/api/planner?view=widget`. Each day contains only its scheduled tasks and the owner's Google events. Titles wrap. Page buttons show remaining items. Today’s tasks support completion changes. Other dates open the web planner. The header shows the full completion count for today. Right-click the widget and select **Edit Widget** to change **Google 일정 표시**. The Mac app holds the session in Keychain. A completion check runs in the Mac app and changes the same task on the Worker.
+The widget supports medium, large, and extra-large sizes. The extra-large size shows a four-day time grid. Today has a wider column. Tasks and all-day events appear above the grid. Timed events use their Google start and end times. Use the time arrows to show other hours. The other sizes show a week strip and the selected day's details. The app reads this week and at least three days after today through `/api/planner?view=widget`. Each day contains only its scheduled tasks and the owner's Google events. Titles wrap. Page buttons show remaining items. Today’s tasks support completion changes. Other dates open the web planner. The header shows the full completion count for today. Right-click the widget and select **Edit Widget** to change **Google 일정 표시**. The Mac app holds the session in Keychain. A completion check runs in the Mac app and changes the same task on the Worker.
 
 Open **작업물** and select a project. Select a color below its name, or select **자동** for its default color. Linked tasks and subtasks use this color in the web planner and Mac widget. The widget also shows the project name.
 
-The refresh button runs in the Mac app and updates the connected calendars and daily tasks. The button does not write to Google Calendar. Calendar credentials stay on the server.
+The refresh button runs in the Mac app and updates the connected calendars and daily tasks. The web calendar also has a refresh button. If a saved calendar has no active connection, the web and widget show a reconnect message. The button does not write to Google Calendar. Calendar credentials stay on the server.
 
 ## Package the Mac beta
 

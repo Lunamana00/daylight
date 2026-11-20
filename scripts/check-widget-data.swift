@@ -16,6 +16,19 @@ struct CheckWidgetData {
         precondition(updated.calendarDays.count == 1)
         precondition(Daylight.weekday("2026-11-12") == "목")
         precondition(Daylight.weekday("2026-11-13") == "금")
+        let events = [
+            DaylightCalendarEvent(id: "early", title: "Overnight", startAt: "2026-11-19T23:00:00+09:00", endAt: "2026-11-20T01:00:00+09:00"),
+            DaylightCalendarEvent(id: "a", title: "A", startAt: "2026-11-20T15:00:00+09:00", endAt: "2026-11-20T17:00:00+09:00"),
+            DaylightCalendarEvent(id: "b", title: "B", startAt: "2026-11-20T15:30:00+09:00", endAt: "2026-11-20T16:00:00+09:00"),
+            DaylightCalendarEvent(id: "c", title: "C", startAt: "2026-11-20T18:00:00+09:00", endAt: "2026-11-20T19:00:00+09:00"),
+        ]
+        precondition(events[0].minutes(on: "2026-11-20")!.start == 0)
+        precondition(events[0].minutes(on: "2026-11-20")!.end == 60)
+        precondition(events[0].minutes(on: "2026-11-21") == nil)
+        let blocks = DaylightTimeGrid.blocks(events, day: "2026-11-20", hour: 14, minimumMinutes: 30)
+        precondition(blocks.count == 3 && blocks[0].columns == 2 && blocks[1].columns == 2)
+        precondition(blocks[0].column != blocks[1].column && blocks[2].columns == 1)
+        precondition(DaylightTimeGrid.blocks(events, day: "2026-11-20", hour: 0, minimumMinutes: 30).count == 1)
         print("Widget data checks passed: old cache, weekly data, empty-cache fallback and weekday labels.")
     }
 }

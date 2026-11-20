@@ -50,6 +50,9 @@ export const milestones = sqliteTable("milestones", {
   date: text("date").notNull(),
   url: text("url"),
   syncedAt: text("synced_at").notNull(),
+  startAt: text("start_at"),
+  endAt: text("end_at"),
+  endDate: text("end_date"),
 }, table => [primaryKey({ columns: [table.calendarId, table.eventId] }), index("milestones_date").on(table.date)]);
 
 // Kept separately so refreshing a calendar snapshot preserves the team's order.
