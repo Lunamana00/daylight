@@ -1,7 +1,7 @@
 import { env } from "cloudflare:workers";
 import { getDaylightSession } from "../../identity";
-import { change, day, PlannerError, readDay, readCalendar, readTaskCatalog, readBacklog, today, widgetPlan, widgetWeekPlan } from "../../../lib/planner-core";
-import { calendarSyncStatus, syncSavedGoogleCalendars } from "../../../lib/google-auth";
+import { addDays, change, day, PlannerError, readDay, readCalendar, readTaskCatalog, readBacklog, today, weekRange, widgetPlan, widgetWeekPlan } from "../../../lib/planner-core";
+import { calendarSyncStatus, moveSavedGoogleEvent, syncSavedGoogleCalendars } from "../../../lib/google-auth";
 
 export const dynamic = "force-dynamic";
 const headers = { "Cache-Control": "private, no-store" };
@@ -51,6 +51,12 @@ export async function POST(request: Request) {
     if (!input || typeof input !== "object" || Array.isArray(input)) throw new PlannerError("올바른 요청이 아닙니다.");
     if (!env.DB) throw new Error("Missing DB");
     const date = day(input.viewDate || today());
+    if (input.op === "calendar.move" && env.DAYLIGHT_AUTH_MODE === "google") {
+      await moveSavedGoogleEvent(env, session.user, input);
+      const data = await readDay(env.DB, session.user, mac ? today() : date, true);
+      data.calendarSync = await calendarSyncStatus(env, session.user.userId);
+      return Response.json(mac ? widgetWeekPlan(data, await readCalendar(env.DB, session.user, today(), "widget")) : data, { headers });
+    }
     if (input.op === "calendar.sync" && env.DAYLIGHT_AUTH_MODE === "google") {
       if (Object.keys(input).some(key => !["op", "viewDate"].includes(key))) throw new PlannerError("올바른 동기화 요청이 아닙니다.");
       await syncSavedGoogleCalendars(env, session.user.userId);
@@ -61,11 +67,14 @@ export async function POST(request: Request) {
     if (env.DAYLIGHT_AUTH_MODE === "google" && input.op === "milestones.reorder") {
       throw new PlannerError("개인 일정은 Google Calendar에서 관리해 주세요.", 403);
     }
-    if (mac && (!["task.patch", "subtask.patch"].includes(input.op) || typeof input.done !== "boolean"
-        || Object.keys(input).some(key => !["op", "id", "done", "viewDate"].includes(key)))) {
-      throw new PlannerError("위젯에서는 할 일 완료 상태만 변경할 수 있습니다.", 403);
+    if (mac) {
+      const completion = ["task.patch", "subtask.patch"].includes(input.op) && typeof input.done === "boolean"
+        && Object.keys(input).every(key => ["op", "id", "done", "viewDate"].includes(key));
+      const move = input.op === "daily.move" && input.date === date
+        && Object.keys(input).every(key => ["op", "id", "targetId", "position", "date", "viewDate"].includes(key));
+      if (!completion && !move) throw new PlannerError("Mac에서는 할 일 완료 상태와 순서를 변경할 수 있어요.", 403);
+      if (date < weekRange(today()).from || date > addDays(today(), 7)) throw new PlannerError("달력을 새로고침해 주세요.", 409);
     }
-    if (mac && date !== today()) throw new PlannerError("위젯을 새로고침해 주세요.", 409);
     await change(env.DB, session.user, input, mac ? date : undefined);
     const data = await readDay(env.DB, session.user, date, env.DAYLIGHT_AUTH_MODE === "google");
     data.calendarSync = await calendarSyncStatus(env, session.user.userId);

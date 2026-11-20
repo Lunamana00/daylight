@@ -2,6 +2,7 @@ import Foundation
 
 enum Daylight {
     static let openApp = URL(string: "daylight-mac://planner")!
+    static let openCalendar = URL(string: "daylight-mac://calendar")!
     static let widgetKind = "DaylightPlanner"
 
     static var server: URL? {
@@ -64,6 +65,18 @@ struct DaylightCalendarEvent: Codable, Equatable, Identifiable {
     var source: String? = nil
     var startAt: String? = nil
     var endAt: String? = nil
+    var calendarId: String? = nil
+    var eventId: String? = nil
+    var date: String? = nil
+    var endDate: String? = nil
+    var canEdit: Bool? = nil
+
+    var moveStart: String? { startAt ?? date }
+    var moveEnd: String? {
+        if let endAt { return endAt }
+        guard let endDate, let midnight = DaylightTimeGrid.instant(endDate + "T00:00:00+09:00") else { return nil }
+        return Daylight.dayKey(midnight.addingTimeInterval(86_400))
+    }
 
     func minutes(on day: String) -> (start: Double, end: Double)? {
         guard let startAt, let endAt, let start = DaylightTimeGrid.instant(startAt),
@@ -99,18 +112,17 @@ enum DaylightTimeGrid {
     }
 
     static func initialHour(days: [DaylightCalendarDay], now: Date) -> Int {
-        let today = Daylight.dayKey(now), current = minute(now, on: today)
-        let starts = days.flatMap { day in
-            day.events.compactMap { event -> Double? in
-                guard let time = event.minutes(on: day.date), day.date > today || time.end > current else { return nil }
-                return day.date == today ? max(current, time.start) : time.start
-            }
-        }
-        return min(18, max(0, Int(min(current, starts.min() ?? current) / 60) - 1))
+        min(18, max(0, Int(minute(now, on: Daylight.dayKey(now)) / 60)))
     }
 
-    static func blocks(_ events: [DaylightCalendarEvent], day: String, hour: Int, minimumMinutes: Double) -> [DaylightTimeBlock] {
-        let from = Double(hour * 60), to = from + 360
+    static func windowStart(_ now: Date) -> Double {
+        min(1200, max(0, floor((minute(now, on: Daylight.dayKey(now)) - 30) / 30) * 30))
+    }
+
+    static func snappedMinute(_ value: Double) -> Double { min(1425, max(0, (value / 15).rounded() * 15)) }
+
+    static func blocks(_ events: [DaylightCalendarEvent], day: String, hour: Int, minimumMinutes: Double, fromMinute: Double? = nil, duration: Double = 360) -> [DaylightTimeBlock] {
+        let from = fromMinute ?? Double(hour * 60), to = from + duration
         var blocks = events.compactMap { event -> DaylightTimeBlock? in
             guard let time = event.minutes(on: day), time.end > from, time.start < to else { return nil }
             let start = max(from, time.start)
@@ -159,17 +171,19 @@ struct DaylightSnapshot: Codable, Equatable {
 
 enum DaylightError: LocalizedError {
     case signIn, unavailable, stale, busy, appGroup, server, keychain, calendar
+    case rejected(String)
 
     var errorDescription: String? {
         switch self {
         case .signIn: "Google 계정으로 로그인해 주세요."
         case .unavailable: "daylight에 연결하지 못했습니다."
-        case .stale: "할 일 목록이 바뀌었습니다. 위젯을 다시 확인해 주세요."
+        case .stale: "목록이 바뀌었습니다. 새로고침 후 다시 시도해 주세요."
         case .busy: "동기화 중입니다. 잠시 후 다시 시도해 주세요."
         case .appGroup: "앱과 위젯의 공유 저장소를 열 수 없습니다."
         case .server: "daylight 서버 주소를 설정해 주세요."
         case .keychain: "Mac 키체인에 로그인 정보를 저장할 수 없습니다."
         case .calendar: "웹에서 Google 캘린더를 다시 연결해 주세요."
+        case .rejected(let message): message
         }
     }
 }

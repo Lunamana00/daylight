@@ -16,6 +16,7 @@ type Props = {
   initialChildId?: string;
   grouped?: boolean;
   dailyOnly?: boolean;
+  dailyOrder?: boolean;
   showDate?: boolean;
   backlog?: BacklogItem[];
   onDeleteBacklog?: (item: BacklogItem) => void;
@@ -26,7 +27,7 @@ type Props = {
 };
 const label = (date: string) => `${Number(date.slice(5, 7))}.${Number(date.slice(8))}`;
 
-export function PlannerTask({ task, projects, date, busy, readOnly, reorderable = true, orderScope = "day", initialEditing = false, initialChildId, grouped = false, dailyOnly = false, showDate = false, backlog = [], onDeleteBacklog, previousTaskId, nextTaskId, onDraggingChange, onChange, onDelete, onOpenWorkLog }: Props) {
+export function PlannerTask({ task, projects, date, busy, readOnly, reorderable = true, orderScope = "day", initialEditing = false, initialChildId, grouped = false, dailyOnly = false, dailyOrder = false, showDate = false, backlog = [], onDeleteBacklog, previousTaskId, nextTaskId, onDraggingChange, onChange, onDelete, onOpenWorkLog }: Props) {
   const [menu, setMenu] = useState(false);
   const [editing, setEditing] = useState(initialEditing && !readOnly);
   const [title, setTitle] = useState(task.title);
@@ -45,7 +46,7 @@ export function PlannerTask({ task, projects, date, busy, readOnly, reorderable 
   const childRows = [...children, ...(readOnly || dailyOnly ? [] : backlog)].sort((a, b) => (a.done ?? 0) - (b.done ?? 0) || a.sortOrder - b.sortOrder);
   const childCount = children.length + (dailyOnly ? 0 : task.unscheduledCount ?? 0);
   const completed = children.filter(child => child.done).length;
-  const move = (targetId?: string) => targetId && onChange({ op: "task.move", id: task.id, targetId, date, scope: orderScope }, "순서를 변경했어요.");
+  const move = (targetId?: string) => targetId && onChange({ op: dailyOrder ? "daily.move" : "task.move", id: task.id, targetId, date, scope: orderScope, ...(dailyOrder ? { position: targetId === previousTaskId ? "before" : "after" } : {}) }, "순서를 변경했어요.");
   const startEditing = () => { setTitle(task.title); setStart(task.date); setEnd(task.endDate ?? task.date); setEditing(true); setMenu(false); };
   const startChildEditing = (child: Subtask) => setEditChild({ ...child, date: child.date ?? defaultChildDate, scheduled: Boolean(child.date) });
   const childComposer = !readOnly && !dailyOnly && (addingChild ? <form className="subtask-form subtask-add" onSubmit={async event => {
@@ -59,7 +60,7 @@ export function PlannerTask({ task, projects, date, busy, readOnly, reorderable 
     </div><div className="subtask-add-actions"><button className="text-button" disabled={busy || !childTitle.trim()}>추가</button><button type="button" className="icon-button" aria-label="하위 할 일 추가 닫기" disabled={busy} onClick={() => setAddingChild(false)}><X size={12} /></button></div></div>
   </form> : <button className="text-button subtask-add-toggle" disabled={busy} onClick={() => { setChildDate(defaultChildDate); setChildScheduled(false); setAddingChild(true); }}>＋ 하위 할 일</button>);
 
-  return <li className={`task-item task-color ${task.projectId ? "" : "task-unassigned"} ${children.length || task.endDate ? "task-family" : ""}`} style={{ "--task-hue": taskHue(task) } as CSSProperties} data-sort-id={task.id} data-sort-done={task.done} data-sort-group="tasks">
+  return <li className={`task-item task-color ${task.projectId ? "" : "task-unassigned"} ${children.length || task.endDate ? "task-family" : ""}`} style={{ "--task-hue": taskHue(task) } as CSSProperties} data-sort-id={task.id} data-sort-done={task.done} data-sort-group={dailyOrder ? "daily" : "tasks"}>
     {!readOnly && task.projectId && <div className="task-project-header">
       <label className="task-project-picker"><span className="project-color-dot" aria-hidden="true" /><select aria-label={`${task.title} 프로젝트`} value={task.projectId ?? ""} disabled={busy} onChange={event => void onChange({ op: "task.link", taskId: task.id, artifactId: event.target.value || null })}>
         <option value="">프로젝트 연결 해제</option>{projects.map(project => <option key={project.id} value={project.id}>{project.title}</option>)}
@@ -133,7 +134,7 @@ export function PlannerDailySubtask({ task, child, busy, onChange, onOpenTask, o
   task: Task; child: Subtask; busy: boolean;
   onChange: Props["onChange"]; onOpenTask: (task: Task, childId?: string) => void; onDelete: Props["onDelete"];
 }) {
-  return <li className={`task-item daily-subtask-row task-color ${task.projectId ? "" : "task-unassigned"}`} style={{ "--task-hue": taskHue(task) } as CSSProperties} data-sort-id={child.id} data-sort-done={child.done} data-sort-group={task.id}>
+  return <li className={`task-item daily-subtask-row task-color ${task.projectId ? "" : "task-unassigned"}`} style={{ "--task-hue": taskHue(task) } as CSSProperties} data-sort-id={child.id} data-sort-done={child.done} data-sort-group="daily">
     {task.projectTitle && <div className="daily-task-project"><span className="project-color-dot" aria-hidden="true" />{task.projectTitle}</div>}
     <div className={`task-row ${child.done ? "is-done" : ""}`}>
       <button type="button" className="icon-button task-order-handle" data-sort-handle draggable={!busy} disabled={busy} aria-label={`${child.title} 순서 변경, 위아래 방향키로 이동`} title="드래그하거나 ↑ ↓ 키로 순서 변경"><GripVertical size={14} /></button>

@@ -25,6 +25,7 @@ npx wrangler d1 execute DB --remote --file deploy/google-auth.sql --config deplo
 npx wrangler d1 execute DB --remote --file deploy/google-calendar.sql --config deploy/wrangler.google.jsonc
 npx wrangler d1 execute DB --remote --file deploy/google-calendar-auto.sql --config deploy/wrangler.google.jsonc
 npx wrangler d1 execute DB --remote --file deploy/google-calendar-personal.sql --config deploy/wrangler.google.jsonc
+npx wrangler d1 execute DB --remote --file deploy/google-calendar-edit.sql --config deploy/wrangler.google.jsonc
 npx wrangler d1 execute DB --remote --file deploy/google-invites.sql --config deploy/wrangler.google.jsonc
 npm run build
 npx wrangler deploy --config deploy/wrangler.google.jsonc
@@ -75,6 +76,14 @@ Keep this key stable. The Worker uses it to encrypt project connection tokens. I
 
 Each user connects a private repository with a fine-grained token. Select only that repository and grant Contents read and write permission. See [work records](../docs/work-log.md). The app saves manual records and selected outputs. It does not collect ChatGPT or Codex conversations. It does not export existing records without a save action.
 
+## Calendar edits from the Mac app
+
+Apply `google-calendar-edit.sql` once to the Google database, after the personal-calendar schema. Apply planner migration `0016_daily_order.sql` before you deploy this version.
+
+The default calendar connection requests read access. To move events, select **Mac 달력에서 일정 이동 허용** in web settings. The separate consent flow requests `calendar.events` and calendar-list read access. The app permits date and time changes only for events in the user's selected calendars. A calendar must also grant write access in Google. Each request uses the saved encrypted connection and the event version. A conflicting update does not overwrite the newer event.
+
+The Mac app uses **calendar.move** for event dates and times, **daily.move** for daily task order, and completion changes. It cannot delete Google events or change their titles. Google sends update notices to attendees. A repeating event changes only for the dragged occurrence. Calendar credentials stay on the server.
+
 ## Install the Mac widget
 
 Use the [Mac installer and installation guide](../docs/mac-install.md) for the prebuilt app. This beta requires macOS 26 or later. Apple has not notarized it. A first launch can require approval in **System Settings > Privacy & Security**.
@@ -83,7 +92,7 @@ To build the app from source:
 
 1. Install Xcode 26 or later. Open `macos/Daylight.xcodeproj` in Xcode.
 2. Select the same Apple signing team for **Daylight** and **DaylightWidget**. Set `DAYLIGHT_SERVER_URL` in the **Daylight** build settings to the Google Worker origin.
-3. Run **Daylight**. Select **Google로 로그인** and use an invited account.
+3. Run **Daylight**. Select **Google로 로그인** and use an invited account. The app opens a 1120 by 700 calendar window. Drag the window edges to change its size.
 4. Open **Edit Widgets** on the desktop. Add **daylight 주간 달력**. Select the extra-large size for today and the next three days. Select **Clear** in the Mac appearance settings for the system glass style.
 
 The widget supports medium, large, and extra-large sizes. The extra-large size shows a four-day time grid. Today has a wider column. Tasks and all-day events appear above the grid. Timed events use their Google start and end times. Use the time arrows to show other hours. The other sizes show a week strip and the selected day's details. The app reads this week and at least three days after today through `/api/planner?view=widget`. Each day contains only its scheduled tasks and the owner's Google events. Titles wrap. Page buttons show remaining items. Today’s tasks support completion changes. Other dates open the web planner. The header shows the full completion count for today. Right-click the widget and select **Edit Widget** to change **Google 일정 표시**. The Mac app holds the session in Keychain. A completion check runs in the Mac app and changes the same task on the Worker.

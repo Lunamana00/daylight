@@ -1,14 +1,14 @@
 // Site-admitted members share reads; writes always use the authenticated owner.
 export type Identity = { userId: string; email: string; fullName?: string | null };
 export type Member = { id: string; name: string };
-export type Subtask = { id: string; taskId: string; date: string | null; title: string; done: number; sortOrder: number };
-export type Task = { id: string; ownerId: string; date: string; endDate: string | null; title: string; done: number; important: number; sortOrder: number; createdAt: string; updatedAt: string; ownerName: string; subtasks: Subtask[]; unscheduledCount?: number; projectId?: string | null; projectTitle?: string | null; projectHue?: number | null };
+export type Subtask = { id: string; taskId: string; date: string | null; title: string; done: number; sortOrder: number; dailyOrder?: number | null };
+export type Task = { id: string; ownerId: string; date: string; endDate: string | null; title: string; done: number; important: number; sortOrder: number; dailyOrder?: number | null; createdAt: string; updatedAt: string; ownerName: string; subtasks: Subtask[]; unscheduledCount?: number; projectId?: string | null; projectTitle?: string | null; projectHue?: number | null };
 export type BacklogItem = { id: string; title: string; sortOrder: number; taskId: string | null; taskTitle: string | null; taskDate: string | null; taskEndDate: string | null; projectId: string | null; projectTitle: string | null; projectHue: number | null; subtask?: number; done?: number };
 export type TaskProject = { id: string; title: string };
 export type Note = { ownerId: string; date: string; content: string; updatedAt: string; ownerName: string };
 export type Milestone = { ownerId: string; calendarId: string; eventId: string; title: string; date: string; url: string | null; ownerName: string; sourceName: string; syncedAt: string; startAt?: string | null; endAt?: string | null; endDate?: string | null };
 export type Source = { ownerId: string; calendarId: string; name: string; syncedAt: string; ownerName: string };
-export type DayData = { date: string; me: Member; members: Member[]; tasks: Task[]; projects?: TaskProject[]; notes: Note[]; milestones: Milestone[]; sources: Source[]; calendarSync?: Array<{ calendarId: string; enabled: boolean; canManage: boolean; error: string | null }> };
+export type DayData = { date: string; me: Member; members: Member[]; tasks: Task[]; projects?: TaskProject[]; notes: Note[]; milestones: Milestone[]; sources: Source[]; calendarSync?: Array<{ calendarId: string; enabled: boolean; canManage: boolean; canEdit?: boolean; error: string | null }> };
 export type CalendarData = { from: string; to: string; tasks: Task[]; milestones: Milestone[] };
 export const milestoneKey = (item: { calendarId: string; eventId: string }) => JSON.stringify([item.calendarId, item.eventId]);
 
@@ -44,8 +44,8 @@ export async function ensureMember(db: D1Database, user: Identity) {
 async function readTasks(db: D1Database, from: string, to: string, ownerId: string | null = null, projectOwnerId = ownerId): Promise<Task[]> {
   const where = "t.date<=? AND COALESCE(t.end_date,t.date)>=? AND (? IS NULL OR t.owner_id=?)";
   const [tasks, children] = await Promise.all([
-    db.prepare(`SELECT t.id,t.owner_id AS ownerId,t.date,t.end_date AS endDate,t.title,t.done,t.important,t.sort_order AS sortOrder,t.created_at AS createdAt,t.updated_at AS updatedAt,p.name AS ownerName,a.id AS projectId,a.title AS projectTitle,a.color_hue AS projectHue,((SELECT count(*) FROM task_backlog b WHERE b.task_id=t.id) + CASE WHEN t.owner_id=? THEN 0 ELSE (SELECT count(*) FROM task_subtasks s WHERE s.task_id=t.id AND s.scheduled=0) END) AS unscheduledCount FROM tasks t JOIN members p ON p.id=t.owner_id LEFT JOIN work_task_links l ON l.task_id=t.id LEFT JOIN work_artifacts a ON a.id=l.artifact_id AND a.owner_id=t.owner_id AND a.owner_id=? WHERE ${where} ORDER BY t.sort_order,t.created_at,t.rowid`).bind(projectOwnerId, projectOwnerId, to, from, ownerId, ownerId).all<Task>(),
-    db.prepare(`SELECT s.id,s.task_id AS taskId,CASE WHEN s.scheduled=1 THEN s.date ELSE NULL END AS date,s.title,s.done,s.sort_order AS sortOrder FROM task_subtasks s JOIN tasks t ON t.id=s.task_id WHERE ${where} AND (s.scheduled=1 OR t.owner_id=?) ORDER BY s.done,s.sort_order,s.created_at,s.rowid`).bind(to, from, ownerId, ownerId, projectOwnerId).all<Subtask>(),
+    db.prepare(`SELECT t.id,t.owner_id AS ownerId,t.date,t.end_date AS endDate,t.title,t.done,t.important,t.sort_order AS sortOrder,t.daily_order AS dailyOrder,t.created_at AS createdAt,t.updated_at AS updatedAt,p.name AS ownerName,a.id AS projectId,a.title AS projectTitle,a.color_hue AS projectHue,((SELECT count(*) FROM task_backlog b WHERE b.task_id=t.id) + CASE WHEN t.owner_id=? THEN 0 ELSE (SELECT count(*) FROM task_subtasks s WHERE s.task_id=t.id AND s.scheduled=0) END) AS unscheduledCount FROM tasks t JOIN members p ON p.id=t.owner_id LEFT JOIN work_task_links l ON l.task_id=t.id LEFT JOIN work_artifacts a ON a.id=l.artifact_id AND a.owner_id=t.owner_id AND a.owner_id=? WHERE ${where} ORDER BY t.sort_order,t.created_at,t.rowid`).bind(projectOwnerId, projectOwnerId, to, from, ownerId, ownerId).all<Task>(),
+    db.prepare(`SELECT s.id,s.task_id AS taskId,CASE WHEN s.scheduled=1 THEN s.date ELSE NULL END AS date,s.title,s.done,s.sort_order AS sortOrder,s.daily_order AS dailyOrder FROM task_subtasks s JOIN tasks t ON t.id=s.task_id WHERE ${where} AND (s.scheduled=1 OR t.owner_id=?) ORDER BY s.done,s.sort_order,s.created_at,s.rowid`).bind(to, from, ownerId, ownerId, projectOwnerId).all<Subtask>(),
   ]);
   const grouped = new Map<string, Subtask[]>();
   for (const child of children.results) {
@@ -66,13 +66,14 @@ export async function readBacklog(db: D1Database, user: Identity) {
     UNION ALL SELECT s.id,s.title,s.sort_order,s.task_id,NULL,t.owner_id,s.created_at,s.sort_order,1,s.done FROM task_subtasks s JOIN tasks t ON t.id=s.task_id WHERE t.owner_id=? AND s.scheduled=0
   ) b LEFT JOIN tasks t ON t.id=b.task_id AND t.owner_id=b.owner_id LEFT JOIN work_task_links l ON l.task_id=t.id LEFT JOIN work_artifacts a ON a.id=CASE WHEN b.task_id IS NULL THEN b.artifact_id ELSE l.artifact_id END AND a.owner_id=b.owner_id ORDER BY b.done,b.sort_order,b.created_at,b.position,b.id`).bind(user.userId, user.userId).all<BacklogItem>()).results;
 }
-export function dailyTaskItems(tasks: Task[], date: string): Array<{ id: string; title: string; done: boolean; parentTitle: string | null; subtask: boolean }> {
-  return tasks.flatMap<{ id: string; title: string; done: boolean; parentTitle: string | null; subtask: boolean }>(task => task.subtasks.length
-    ? task.subtasks.filter(child => child.date === date).map(child => ({ id: child.id, title: child.title, done: Boolean(child.done), parentTitle: task.title, subtask: true }))
+export function dailyTaskItems(tasks: Task[], date: string) {
+  return tasks.flatMap(task => task.subtasks.length
+    ? task.subtasks.filter(child => child.date === date).map(child => ({ id: child.id, title: child.title, done: Boolean(child.done), parentTitle: task.title as string | null, subtask: true, dailyOrder: child.dailyOrder }))
     : !task.unscheduledCount && (!task.endDate || task.endDate === task.date) && task.date === date
-      ? [{ id: task.id, title: task.title, done: Boolean(task.done), parentTitle: null, subtask: false }]
+      ? [{ id: task.id, title: task.title, done: Boolean(task.done), parentTitle: null as string | null, subtask: false, dailyOrder: task.dailyOrder }]
       : []
-  ).sort((a, b) => Number(a.done) - Number(b.done));
+  ).sort((a, b) => Number(a.done) - Number(b.done) || (a.dailyOrder ?? Infinity) - (b.dailyOrder ?? Infinity))
+    .map(({ dailyOrder: _order, ...item }) => item);
 }
 export function calendarTaskLanes(tasks: Task[], from: string, to: string): Task[][] {
   const periods = tasks.filter(task => task.endDate && task.endDate > task.date && task.date <= to && task.endDate >= from);
@@ -134,12 +135,12 @@ export function calendarTaskGroups(tasks: Task[], date: string) {
     .filter(({ task, items }) => items.length > 0 && (task.subtasks.length > 0 || !task.endDate || task.endDate === task.date));
 }
 function widgetTasks(tasks: Task[], ownerId: string, date: string) {
-  return tasks.filter(task => task.ownerId === ownerId).flatMap(task =>
-    dailyTaskItems([task], date).map(item => ({
-      ...item, projectTitle: task.projectId ? task.projectTitle ?? null : null,
-      projectHue: task.projectId ? taskHue(task) : null,
-    }))
-  ).sort((a, b) => Number(a.done) - Number(b.done));
+  const own = tasks.filter(task => task.ownerId === ownerId);
+  const parents = new Map(own.flatMap(task => [task.id, ...task.subtasks.map(child => child.id)].map(id => [id, task] as const)));
+  return dailyTaskItems(own, date).map(item => {
+    const task = parents.get(item.id)!;
+    return { ...item, projectTitle: task.projectId ? task.projectTitle ?? null : null, projectHue: task.projectId ? taskHue(task) : null };
+  });
 }
 export function calendarSyncMessage(data: DayData) {
   if (!data.calendarSync) return null;
@@ -164,7 +165,10 @@ export function widgetWeekPlan(data: DayData, calendar: CalendarData) {
     return {
       date, tasks: widgetTasks(calendar.tasks, data.me.id, date),
       events: calendar.milestones.filter(event => event.ownerId === data.me.id && event.date <= date && (event.endDate ?? event.date) >= date)
-        .map(event => ({ id: milestoneKey(event), title: event.title, source: event.sourceName, startAt: event.startAt ?? null, endAt: event.endAt ?? null })),
+        .map(event => ({ id: milestoneKey(event), calendarId: event.calendarId, eventId: event.eventId,
+          title: event.title, source: event.sourceName, date: event.date, endDate: event.endDate ?? event.date,
+          canEdit: data.calendarSync?.some(connection => connection.calendarId === event.calendarId && connection.canEdit && connection.enabled) ?? false,
+          startAt: event.startAt ?? null, endAt: event.endAt ?? null })),
     };
   });
   return { ...widgetPlan(data), tasks: widgetTasks(data.tasks, data.me.id, data.date), days };
@@ -244,6 +248,22 @@ export async function change(db: D1Database, user: Identity, input: Record<strin
     const result = await db.batch(statements);
     if (!result[0].meta.changes) throw new PlannerError("작업 기간 안에서 날짜를 선택해 주세요. 날짜 미정 할 일은 보관되어 있어요.", 409);
     return { id };
+  }
+  if (input.op === "daily.move") {
+    const date = day(input.date), id = text(input.id, "할 일 ID", 100), targetId = text(input.targetId, "이동할 위치", 100);
+    if (taskDate && date !== taskDate) throw new PlannerError("달력을 새로고침해 주세요.", 409);
+    if (!["before", "after"].includes(input.position as string)) throw new PlannerError("올바른 이동 위치가 아닙니다.");
+    const items = dailyTaskItems(await readTasks(db, date, date, user.userId), date);
+    const source = items.find(item => item.id === id), target = items.find(item => item.id === targetId);
+    if (!source || !target) throw new PlannerError("같은 날짜의 본인 할 일만 옮길 수 있어요.", 403);
+    if (source.done !== target.done) throw new PlannerError("완료한 할 일은 목록 아래에 표시됩니다.", 409);
+    if (id === targetId) return { saved: true };
+    const ordered = items.filter(item => item.id !== id);
+    ordered.splice(ordered.findIndex(item => item.id === targetId) + Number(input.position === "after"), 0, source);
+    await db.batch(ordered.map((item, index) => item.subtask
+      ? db.prepare("UPDATE task_subtasks SET daily_order=?,updated_at=? WHERE id=? AND date=? AND scheduled=1 AND task_id IN (SELECT id FROM tasks WHERE owner_id=?)").bind(index, now, item.id, date, user.userId)
+      : db.prepare("UPDATE tasks SET daily_order=?,updated_at=? WHERE id=? AND date=? AND owner_id=?").bind(index, now, item.id, date, user.userId)));
+    return { saved: true };
   }
   if (input.op === "task.move" || input.op === "subtask.move") {
     const id = text(input.id, "할 일 ID", 100), targetId = text(input.targetId, "이동할 위치", 100);
@@ -325,6 +345,7 @@ export async function change(db: D1Database, user: Identity, input: Record<strin
       const values: (string | number)[] = [now];
       // Keep the row and its last date so clearing a schedule preserves record links and order.
       if (input.date !== undefined) {
+        fields.push("daily_order=NULL");
         fields.push("scheduled=?"); values.push(Number(date !== null));
         if (date !== null) { fields.push("date=?"); values.push(date); }
       }
@@ -351,7 +372,7 @@ export async function change(db: D1Database, user: Identity, input: Record<strin
     const end = input.endDate === undefined ? current.endDate : input.endDate === null ? null : day(input.endDate);
     if (end && end < start) throw new PlannerError("종료일은 시작일 이후로 선택해주세요.");
     if (input.title !== undefined) { fields.push("title=?"); values.push(text(input.title, "할 일", 240)); }
-    if (input.date !== undefined) { fields.push("date=?"); values.push(day(input.date)); }
+    if (input.date !== undefined) { fields.push("date=?", "daily_order=NULL"); values.push(day(input.date)); }
     if (input.endDate !== undefined) { fields.push("end_date=?"); values.push(end); }
     if (input.done !== undefined) { fields.push("done=?"); values.push(bool(input.done)); }
     if (input.important !== undefined) { fields.push("important=?"); values.push(bool(input.important)); }

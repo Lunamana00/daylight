@@ -281,4 +281,19 @@ assert.deepEqual(calendarWeekOffsets([
   { column: 3, span: 1, height: 40 },
 ]), [0, 0, 92, 74, 166, 274, 148], 'Different card heights pack independently while spanning cards preserve order');
 assert.deepEqual(calendarWeekOffsets([]), []);
+const orderDate = '2045-07-03';
+const dailyRoot = await change(db, alice, { op: 'task.add', date: orderDate, title: 'Daily root' });
+const dailyParent = await change(db, alice, { op: 'task.add', date: orderDate, endDate: '2045-07-04', title: 'Long work' });
+const dailyChild = await change(db, alice, { op: 'subtask.add', taskId: dailyParent.id, date: orderDate, title: 'Daily child' });
+const tomorrowChild = await change(db, alice, { op: 'subtask.add', taskId: dailyParent.id, date: '2045-07-04', title: 'Tomorrow child' });
+await change(db, alice, { op: 'daily.move', id: dailyChild.id, targetId: dailyRoot.id, position: 'before', date: orderDate });
+const reordered = await readDay(db, alice, orderDate);
+assert.deepEqual(dailyTaskItems(reordered.tasks, orderDate).map(item => item.id), [dailyChild.id, dailyRoot.id]);
+assert.deepEqual(widgetPlan(reordered).tasks.map(item => item.id), [dailyChild.id, dailyRoot.id], 'The app and widget use the same daily order');
+await assert.rejects(change(db, bob, { op: 'daily.move', id: dailyChild.id, targetId: dailyRoot.id, position: 'after', date: orderDate }));
+await assert.rejects(change(db, alice, { op: 'daily.move', id: tomorrowChild.id, targetId: dailyRoot.id, position: 'after', date: orderDate }));
+await change(db, alice, { op: 'subtask.patch', id: dailyChild.id, done: true });
+assert.deepEqual(dailyTaskItems((await readDay(db, alice, orderDate)).tasks, orderDate).map(item => item.id), [dailyRoot.id, dailyChild.id]);
+await assert.rejects(change(db, alice, { op: 'daily.move', id: dailyChild.id, targetId: dailyRoot.id, position: 'before', date: orderDate }));
+console.log('PASS: daily order crosses parent groups, remains owner/date scoped, and keeps completed items last.');
 sqlite.close();

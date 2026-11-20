@@ -29,6 +29,15 @@ struct CheckWidgetData {
         precondition(blocks.count == 3 && blocks[0].columns == 2 && blocks[1].columns == 2)
         precondition(blocks[0].column != blocks[1].column && blocks[2].columns == 1)
         precondition(DaylightTimeGrid.blocks(events, day: "2026-11-20", hour: 0, minimumMinutes: 30).count == 1)
+        let late = DaylightTimeGrid.instant("2026-11-20T23:45:00+09:00")!
+        precondition(DaylightTimeGrid.windowStart(late) == 1200)
+        let afternoon = DaylightTimeGrid.instant("2026-11-20T17:17:00+09:00")!
+        precondition(DaylightTimeGrid.windowStart(afternoon) == 990)
+        precondition(DaylightTimeGrid.initialHour(days: [friday], now: afternoon) == 17)
+        precondition(DaylightTimeGrid.snappedMinute(1038) == 1035)
+        precondition(DaylightTimeGrid.snappedMinute(1450) == 1425)
+        let allDay = DaylightCalendarEvent(id: "all", title: "All day", date: "2026-11-20", endDate: "2026-11-21")
+        precondition(allDay.moveStart == "2026-11-20" && allDay.moveEnd == "2026-11-22")
         print("Widget data checks passed: old cache, weekly data, empty-cache fallback and weekday labels.")
     }
 }

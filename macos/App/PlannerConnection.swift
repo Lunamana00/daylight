@@ -12,6 +12,8 @@ final class PlannerConnection: NSObject, ObservableObject, ASWebAuthenticationPr
     @Published private(set) var signedIn = false
     @Published private(set) var working = false
     @Published private(set) var status = ""
+    @Published private(set) var plan: DaylightSnapshot?
+    @Published private(set) var failed = false
 
     let server = Daylight.server
     private var login: DaylightLogin?
@@ -30,6 +32,7 @@ final class PlannerConnection: NSObject, ObservableObject, ASWebAuthenticationPr
         super.init()
         login = server.flatMap { SessionVault.read(for: $0) }
         signedIn = login?.isActive == true
+        if signedIn, let cached = DaylightCache.read(), cached.date == Daylight.dayKey() { plan = cached }
         status = server == nil ? "daylight 서버 주소를 설정해 주세요." : signedIn ? "동기화 중" : "Google 로그인 필요"
         refreshTimer = Timer.scheduledTimer(withTimeInterval: 180, repeats: true) { [weak self] _ in
             Task { @MainActor in await self?.refresh() }
@@ -109,8 +112,8 @@ final class PlannerConnection: NSObject, ObservableObject, ASWebAuthenticationPr
         do {
             let login = try activeLogin()
             let current = try await snapshot(using: login)
-            guard current.date == day, current.accountID == accountID,
-                  let task = current.tasks.first(where: { $0.id == taskID }) else {
+            guard current.accountID == accountID,
+                  let task = current.calendarDays.first(where: { $0.date == day })?.tasks.first(where: { $0.id == taskID }) else {
                 try publish(current)
                 throw DaylightError.stale
             }
@@ -120,6 +123,35 @@ final class PlannerConnection: NSObject, ObservableObject, ASWebAuthenticationPr
         } catch {
             show(error)
             throw error
+        }
+    }
+
+    func moveTask(_ task: DaylightTask, to target: String, after: Bool, day: String, accountID: String) async {
+        guard plan?.accountID == accountID else { show(DaylightError.stale); return }
+        await mutate(["op": "daily.move", "id": task.id, "targetId": target, "position": after ? "after" : "before", "date": day, "viewDate": day])
+    }
+
+    func moveEvent(_ event: DaylightCalendarEvent, to start: String, accountID: String) async {
+        guard plan?.accountID == accountID, let calendarId = event.calendarId, let eventId = event.eventId,
+              let previousStart = event.moveStart, let previousEnd = event.moveEnd, event.canEdit == true else {
+            show(DaylightError.rejected("웹에서 Google 일정 이동 권한을 연결해 주세요.")); return
+        }
+        if start == previousStart { return }
+        await mutate(["op": "calendar.move", "calendarId": calendarId, "eventId": eventId, "start": previousStart, "end": previousEnd, "newStart": start])
+    }
+
+    private func mutate(_ input: [String: String]) async {
+        guard !working else { return }
+        working = true
+        revision += 1
+        defer { working = false }
+        do {
+            let login = try activeLogin()
+            _ = try await request("api/planner", body: JSONEncoder().encode(input), login: login, timeout: 45)
+            try publish(await snapshot(using: login))
+        } catch {
+            if let login, let current = try? await snapshot(using: login) { try? publish(current) }
+            show(error)
         }
     }
 
@@ -175,6 +207,9 @@ final class PlannerConnection: NSObject, ObservableObject, ASWebAuthenticationPr
         if status == 401 { throw DaylightError.signIn }
         if status == 409 { throw DaylightError.stale }
         if status == 428 { throw DaylightError.calendar }
+        if [400, 403, 502].contains(status), let message = try? JSONDecoder().decode([String: String].self, from: data)["error"] {
+            throw DaylightError.rejected(message)
+        }
         guard (200..<300).contains(status) else { throw DaylightError.unavailable }
         return data
     }
@@ -185,12 +220,15 @@ final class PlannerConnection: NSObject, ObservableObject, ASWebAuthenticationPr
             try DaylightCache.write(snapshot)
             WidgetCenter.shared.reloadTimelines(ofKind: Daylight.widgetKind)
         }
-        status = snapshot.calendarMessage ?? "위젯 연결됨"
+        plan = snapshot
+        failed = snapshot.calendarMessage != nil
+        status = snapshot.calendarMessage ?? "동기화됨"
     }
 
     private func forgetLogin() {
         login = nil
         signedIn = false
+        plan = nil
         if DaylightCache.read() != nil {
             try? DaylightCache.clear()
             WidgetCenter.shared.reloadTimelines(ofKind: Daylight.widgetKind)
@@ -198,6 +236,7 @@ final class PlannerConnection: NSObject, ObservableObject, ASWebAuthenticationPr
     }
 
     private func show(_ error: Error) {
+        failed = true
         if let failure = error as? DaylightError, case .signIn = failure {
             if login != nil, let server { try? SessionVault.remove(for: server) }
             forgetLogin()

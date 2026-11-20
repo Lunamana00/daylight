@@ -69,6 +69,8 @@ struct DaylightWidgetView: View {
                         Image(systemName: "sun.max").widgetAccentable().accessibilityLabel("daylight")
                         Text(Daylight.shortDate(Daylight.dayKey(entry.date))).font(.headline)
                         Spacer(minLength: 4)
+                        Link(destination: Daylight.openCalendar) { Image(systemName: "arrow.up.left.and.arrow.down.right").frame(width: 22, height: 24) }
+                            .accessibilityLabel("큰 달력에서 편집")
                         if let snapshot = entry.snapshot {
                             Text("오늘 \(snapshot.completed)/\(snapshot.total)").font(.system(size: 11, weight: .medium)).privacySensitive()
                         }
@@ -179,6 +181,8 @@ private struct DaylightFourDayCalendar: View {
                         Text("오늘 \(snapshot.completed)/\(snapshot.total) 완료").privacySensitive()
                     }
                     Spacer(minLength: 4)
+                    Link(destination: Daylight.openCalendar) { Image(systemName: "arrow.up.left.and.arrow.down.right").frame(width: 22, height: 22) }
+                        .accessibilityLabel("큰 달력에서 편집")
                     if entry.showCalendar {
                         Button(intent: SelectDaylightCalendarHour(hour: hour - 3)) {
                             Image(systemName: "chevron.left").frame(width: 22, height: 22)

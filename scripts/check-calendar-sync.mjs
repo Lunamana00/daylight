@@ -14,7 +14,7 @@ function moduleURL(path, imports = {}) {
 const coreURL = moduleURL('../lib/planner-core.ts');
 const calendarURL = moduleURL('../lib/google-calendar.ts', { './planner-core': coreURL });
 const { change, readDay, syncMilestones, today, addDays, readCalendar, widgetWeekPlan, calendarSyncMessage } = await import(coreURL);
-const { handleGoogleAuth, readCalendarGrant, syncSavedGoogleCalendars, calendarSyncStatus, handleInvitations, getGoogleSession } = await import(moduleURL('../lib/google-auth.ts', {
+const { handleGoogleAuth, moveSavedGoogleEvent, readCalendarGrant, syncSavedGoogleCalendars, calendarSyncStatus, handleInvitations, getGoogleSession } = await import(moduleURL('../lib/google-auth.ts', {
   './planner-core': coreURL, './google-calendar': calendarURL,
 }));
 const sqlite = new DatabaseSync(':memory:');
@@ -33,6 +33,7 @@ sqlite.exec(`INSERT INTO members VALUES ('migration', 'Saved member', 'saved@exa
 const beforeMigration = ['calendar_sources', 'milestones', 'milestone_order', 'daylight_google_calendar_connections'].map(table => sqlite.prepare('SELECT * FROM ' + table).all());
 sqlite.exec(readFileSync(new URL('../deploy/google-calendar-personal.sql', import.meta.url), 'utf8'));
 assert.deepEqual(['calendar_sources', 'milestones', 'milestone_order', 'daylight_google_calendar_connections'].map(table => sqlite.prepare('SELECT * FROM ' + table).all()), beforeMigration);
+sqlite.exec(readFileSync(new URL('../deploy/google-calendar-edit.sql', import.meta.url), 'utf8'));
 sqlite.exec('DELETE FROM daylight_google_calendar_connections; DELETE FROM milestones; DELETE FROM milestone_order; DELETE FROM calendar_sources; DELETE FROM members');
 const db = {
   prepare(sql) {
@@ -73,6 +74,10 @@ let eventVersion = 1;
 let extraEvents = [];
 let calls = 0;
 let loginClaims = null;
+let editGranted = false;
+let calendarRole = 'reader';
+let patchStatus = 200;
+const patches = [];
 const originalFetch = globalThis.fetch;
 globalThis.fetch = async (input, options) => {
   calls++;
@@ -83,14 +88,28 @@ globalThis.fetch = async (input, options) => {
     claims.exp = Math.floor(claims.exp);
     return Response.json({ access_token: 'test-access', refresh_token: options.body.get('grant_type') === 'authorization_code' ? 'test-refresh' : undefined,
       id_token: 'header.' + Buffer.from(JSON.stringify(claims)).toString('base64url') + '.signature', expires_in: 3600,
-      scope: 'openid email https://www.googleapis.com/auth/calendar.calendarlist.readonly https://www.googleapis.com/auth/calendar.events.readonly' });
+      scope: 'openid email https://www.googleapis.com/auth/calendar.calendarlist.readonly https://www.googleapis.com/auth/calendar.events' + (editGranted ? '' : '.readonly') });
   }
   assert.equal(url.hostname, 'www.googleapis.com');
-  if (url.pathname.endsWith('/calendarList')) return Response.json({ items: calendarIDs.map((id, index) => ({ id, summary: id, primary: index === 0, accessRole: 'reader' })) });
+  if (url.pathname.endsWith('/calendarList')) return Response.json({ items: calendarIDs.map((id, index) => ({ id, summary: id, primary: index === 0, accessRole: calendarRole })) });
   const id = decodeURIComponent(url.pathname.split('/')[4]);
   assert.ok(calendarIDs.includes(id), 'Only selected calendars can be read');
   if (id === failingCalendar) return new Response('', { status: 503 });
-  return Response.json({ summary: id, accessRole: 'reader', items: [{ id: 'event', summary: 'Milestone ' + eventVersion,
+  const eventId = decodeURIComponent(url.pathname.split('/')[6] ?? '');
+  if (eventId) {
+    const event = extraEvents.find(event => event.id === eventId);
+    assert.ok(event, 'Only an imported event is moved');
+    if (options.method === 'PATCH') {
+      assert.equal(options.headers['If-Match'], '"version-1"');
+      assert.equal(url.searchParams.get('sendUpdates'), 'all');
+      const patch = JSON.parse(options.body);
+      assert.deepEqual(Object.keys(patch).sort(), ['end', 'start']);
+      if (patchStatus !== 200) return new Response('', { status: patchStatus });
+      Object.assign(event, patch); patches.push({ calendarId: id, eventId, patch });
+    }
+    return Response.json({ ...event, etag: '"version-1"', description: 'Preserve this', attendees: [{ email: 'guest@example.test' }] });
+  }
+  return Response.json({ summary: id, accessRole: calendarRole, items: [{ id: 'event', summary: 'Milestone ' + eventVersion,
     visibility: 'private', start: { date: today() } }, ...extraEvents] });
 };
 try {
@@ -210,6 +229,43 @@ try {
   const widget = widgetWeekPlan(data, await readCalendar(db, account, today(), 'widget'));
   assert.ok(widget.days.find(day => day.date === today()).events.some(event => event.id.includes('overnight')));
   assert.equal((await readCalendar(db, account, '2026-11-20', 'widget')).to, '2026-11-23', 'Friday widget includes Monday');
+  const move = { op: 'calendar.move', calendarId: calendarIDs[0], eventId: 'timed', start: timed.startAt, end: timed.endAt, newStart: tomorrow + 'T15:45:00+09:00' };
+  await assert.rejects(moveSavedGoogleEvent(env, account, move), error => error.status === 403, 'Read-only grants cannot write');
+  assert.equal(patches.length, 0);
+  const enable = await handleGoogleAuth(request('/auth/google/calendar', 'edit=true'), env);
+  const editAuth = new URL(enable.headers.get('location'));
+  assert.ok(editAuth.searchParams.get('scope').split(' ').includes('https://www.googleapis.com/auth/calendar.events'));
+  const editState = editAuth.searchParams.get('state');
+  loginClaims = { iss: 'https://accounts.google.com', aud: 'test-client', exp: Math.floor(Date.now() / 1000) + 600,
+    nonce: sqlite.prepare('SELECT nonce FROM daylight_google_flows WHERE state=?').get(editState).nonce,
+    sub: 'test-subject', email_verified: true, email: account.email };
+  editGranted = true; calendarRole = 'writer';
+  const editCallback = await handleGoogleAuth(new Request(origin + '/auth/google/callback?state=' + editState + '&code=edit-code', {
+    headers: { Cookie: sessionCookie + '; __Host-daylight-google=' + editState },
+  }), env);
+  assert.equal(editCallback.status, 303);
+  const editCookie = editCallback.headers.getSetCookie().find(value => value.startsWith('__Host-daylight-calendar=')).split(';')[0];
+  assert.equal((await readCalendarGrant(new Headers({ Cookie: editCookie }), hash, 'test-secret')).canEdit, true);
+  assert.equal((await handleGoogleAuth(request('/auth/google/calendar/sync', new URLSearchParams(calendarIDs.map(id => ['calendarId', id])), editCookie), env)).status, 303);
+  assert.ok((await calendarSyncStatus(env, account.userId)).every(connection => connection.canEdit));
+  const beforeUnauthorized = calls;
+  await assert.rejects(moveSavedGoogleEvent(env, { userId: 'outsider', email: 'outsider@example.test' }, move), error => error.status === 403);
+  assert.equal(calls, beforeUnauthorized, 'A different owner cannot read or patch an event through this connection');
+  await assert.rejects(moveSavedGoogleEvent(env, account, { ...move, newStart: '2026-02-31T12:00:00+09:00' }));
+  patchStatus = 412;
+  await assert.rejects(moveSavedGoogleEvent(env, account, move), error => error.status === 409);
+  assert.equal((await readDay(db, account, today(), true)).milestones.find(event => event.eventId === 'timed').startAt, timed.startAt, 'A conflict keeps the saved event');
+  patchStatus = 200;
+  await moveSavedGoogleEvent(env, account, move);
+  assert.equal(patches.length, 1);
+  assert.equal(patches[0].patch.start.dateTime, tomorrow + 'T06:45:00.000Z');
+  assert.equal(patches[0].patch.end.dateTime, tomorrow + 'T08:15:00.000Z', 'Dragging preserves duration');
+  await assert.rejects(moveSavedGoogleEvent(env, account, move), error => error.status === 409, 'An old drag cannot overwrite a newer time');
+  assert.equal(patches.length, 1);
+  await moveSavedGoogleEvent(env, account, { op: 'calendar.move', calendarId: calendarIDs[0], eventId: 'all-day', start: today(), end: tomorrow, newStart: tomorrow });
+  assert.deepEqual(patches[1].patch, { start: { date: tomorrow }, end: { date: addDays(tomorrow, 1) } });
+  assert.equal((await calendarSyncStatus(env, account.userId)).find(connection => connection.calendarId === calendarIDs[0]).enabled, true);
+  loginClaims = null;
   extraEvents = [{ ...extraEvents[0], start: { dateTime: tomorrow + 'T15:30:00+09:00' }, end: { dateTime: tomorrow + 'T17:00:00+09:00' } }];
   await syncSavedGoogleCalendars(env, account.userId);
   data = await readDay(db, account, today(), true);

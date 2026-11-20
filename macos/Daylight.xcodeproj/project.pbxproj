@@ -16,6 +16,7 @@
 		C10000000000000000000007 /* SetDaylightTaskDone.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000007 /* SetDaylightTaskDone.swift */; };
 		C10000000000000000000008 /* DaylightWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000008 /* DaylightWidget.swift */; };
 		C10000000000000000000009 /* DaylightWidget.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = A10000000000000000000021 /* DaylightWidget.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		C1000000000000000000000A /* DesktopCalendarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000000B /* DesktopCalendarView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -55,6 +56,7 @@
 		B10000000000000000000008 /* DaylightWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DaylightWidget.swift; sourceTree = "<group>"; };
 		B10000000000000000000009 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		B1000000000000000000000A /* DaylightWidget.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = DaylightWidget.entitlements; sourceTree = "<group>"; };
+		B1000000000000000000000B /* DesktopCalendarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesktopCalendarView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -98,6 +100,7 @@
 			isa = PBXGroup;
 			children = (
 				B10000000000000000000001 /* DaylightApp.swift */,
+				B1000000000000000000000B /* DesktopCalendarView.swift */,
 				B10000000000000000000002 /* PlannerConnection.swift */,
 				B10000000000000000000003 /* SessionVault.swift */,
 				B10000000000000000000004 /* Info.plist */,
@@ -196,6 +199,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				C10000000000000000000001 /* DaylightApp.swift in Sources */,
+				C1000000000000000000000A /* DesktopCalendarView.swift in Sources */,
 				C10000000000000000000002 /* PlannerConnection.swift in Sources */,
 				C10000000000000000000003 /* SessionVault.swift in Sources */,
 				C10000000000000000000004 /* DaylightData.swift in Sources */,

@@ -177,8 +177,7 @@ export default function Planner({ googleLogin = false }: { googleLogin?: boolean
   const inspectedTask = data?.tasks.find(task => task.id === calendarTask?.id) ?? ownCatalog.find(task => task.id === calendarTask?.id) ?? calendarTask;
   const dailyItems = dailyTaskItems(myTasks, date);
   const completed = dailyItems.filter(task => task.done).length;
-  const dailyRows = myTasks.flatMap(task => dailyTaskItems([task], date).map(item => ({ task, item })))
-    .sort((a, b) => Number(a.item.done) - Number(b.item.done))
+  const dailyRows = dailyItems.map(item => ({ item, task: myTasks.find(task => task.id === item.id || task.subtasks.some(child => child.id === item.id))! }))
     .filter(({ item }) => filter === "all" || (filter === "done" ? item.done : !item.done));
   const mondayOffset = (new Date(date + "T00:00:00Z").getUTCDay() + 6) % 7;
   const monday = addDays(date, -mondayOffset);
@@ -194,11 +193,12 @@ export default function Planner({ googleLogin = false }: { googleLogin?: boolean
     setDeleteTask(parent); setDeleteChild(child ?? null); setDeleteBacklog(null); setModal("delete");
   }
   function removeBacklog(item: BacklogItem) { setDeleteBacklog(item); setDeleteTask(null); setDeleteChild(null); setModal("delete"); }
-  function taskRow(task: Task, { readOnly = false, managePeriod = false, grouped = false, dailyOnly = false, order = myTasks, orderScope = "day" }: { readOnly?: boolean; managePeriod?: boolean; grouped?: boolean; dailyOnly?: boolean; order?: Array<Task | BacklogItem>; orderScope?: "day" | "all" } = {}) {
+  function taskRow(task: Task, { readOnly = false, managePeriod = false, grouped = false, dailyOnly = false, dailyOrder = false, order = myTasks, orderScope = "day" }: { readOnly?: boolean; managePeriod?: boolean; grouped?: boolean; dailyOnly?: boolean; dailyOrder?: boolean; order?: Array<Task | BacklogItem>; orderScope?: "day" | "all" } = {}) {
     const rowDate = date >= task.date && date <= (task.endDate ?? task.date) ? date : task.date;
     const ordered = order.filter(item => (item.done ?? 0) === task.done && (orderScope === "all" || "date" in item && item.date <= rowDate && (item.endDate ?? item.date) >= rowDate));
-    const index = ordered.findIndex(item => item.id === task.id);
-    return <PlannerTask key={`${rowDate}-${task.id}`} task={task} projects={data?.projects ?? []} date={rowDate} busy={busy} readOnly={readOnly} grouped={grouped} dailyOnly={dailyOnly} backlog={readOnly ? [] : backlog.filter(item => item.taskId === task.id && !item.subtask)} onDeleteBacklog={removeBacklog} showDate={grouped || orderScope === "all"} reorderable={!managePeriod} orderScope={orderScope} initialEditing={managePeriod && !calendarChildId} initialChildId={managePeriod ? calendarChildId : undefined} previousTaskId={ordered[index - 1]?.id} nextTaskId={ordered[index + 1]?.id} onDraggingChange={setDragging} onChange={async (input, message) => {
+    const neighbors = dailyOrder ? dailyItems.filter(item => item.done === Boolean(task.done)) : ordered;
+    const index = neighbors.findIndex(item => item.id === task.id);
+    return <PlannerTask key={`${rowDate}-${task.id}`} task={task} projects={data?.projects ?? []} date={rowDate} busy={busy} readOnly={readOnly} grouped={grouped} dailyOnly={dailyOnly} dailyOrder={dailyOrder} backlog={readOnly ? [] : backlog.filter(item => item.taskId === task.id && !item.subtask)} onDeleteBacklog={removeBacklog} showDate={grouped || orderScope === "all"} reorderable={!managePeriod} orderScope={orderScope} initialEditing={managePeriod && !calendarChildId} initialChildId={managePeriod ? calendarChildId : undefined} previousTaskId={neighbors[index - 1]?.id} nextTaskId={neighbors[index + 1]?.id} onDraggingChange={setDragging} onChange={async (input, message) => {
       const saved = await mutate(input, message);
       if (saved && managePeriod && input.op === "task.patch" && typeof input.date === "string") selectDate(input.date);
       return saved;
@@ -223,9 +223,9 @@ export default function Planner({ googleLogin = false }: { googleLogin?: boolean
     <div className="task-pane-heading"><h3>{date === today() ? "오늘 할 일" : `${shortDate(date)} 할 일`}</h3><span><strong>{completed}</strong> / {dailyItems.length} 완료</span></div>
     <div className="task-progress"><span style={{ width: `${dailyItems.length ? completed / dailyItems.length * 100 : 0}%` }} /></div>
     <div className="task-filter" aria-label="할 일 필터">{[["all", "전체"], ["open", "미완료"], ["done", "완료"]].map(([key, label]) => <button key={key} className={filter === key ? "selected" : ""} onClick={() => setFilter(key)}>{label}{key === "done" && <span>{completed}</span>}</button>)}</div>
-    {dailyRows.length ? <PlannerSortableList className="task-list task-day-list" disabled={busy} onDraggingChange={setDragging} onMove={(id, targetId, position) => mutate({ op: myTasks.some(task => task.id === id) ? "task.move" : "subtask.move", id, targetId, position, date }, "순서를 변경했어요.")}>{dailyRows.map(({ task, item }) => item.subtask
+    {dailyRows.length ? <PlannerSortableList className="task-list task-day-list" disabled={busy} onDraggingChange={setDragging} onMove={(id, targetId, position) => mutate({ op: "daily.move", id, targetId, position, date }, "순서를 변경했어요.")}>{dailyRows.map(({ task, item }) => item.subtask
       ? <PlannerDailySubtask key={item.id} task={task} child={task.subtasks.find(child => child.id === item.id)!} busy={busy} onChange={mutate} onOpenTask={openTask} onDelete={removeTask} />
-      : taskRow(task, { order: myTasks.filter(item => !item.subtasks.length) }))}</PlannerSortableList>
+      : taskRow(task, { dailyOrder: true, order: myTasks.filter(item => !item.subtasks.length) }))}</PlannerSortableList>
       : <p className="empty-tasks">{myTasks.length ? filter === "done" ? "완료한 할 일 없음" : "남은 할 일 없음" : "오늘 할 일 없음"}</p>}
   </section>;
   const composer = <form className="task-composer" onKeyDown={event => {
@@ -300,7 +300,7 @@ export default function Planner({ googleLogin = false }: { googleLogin?: boolean
           <button className="button primary full" type="submit" disabled={busy}>
             <CalendarDays size={15} />{data?.sources.length ? "캘린더 선택·다시 연결" : "Google 캘린더 선택"}
           </button>
-        </form>{data?.calendarSync?.some(connection => connection.enabled) && <button className="button secondary full" disabled={busy} onClick={() => void mutate({ op: "calendar.sync" }, "선택한 캘린더를 동기화했어요.")}><RefreshCw size={15} />지금 동기화</button>}</> : <>
+        </form><a className="button secondary full" href="/calendar/edit">Mac 달력에서 일정 이동 허용</a>{data?.calendarSync?.some(connection => connection.enabled) && <button className="button secondary full" disabled={busy} onClick={() => void mutate({ op: "calendar.sync" }, "선택한 캘린더를 동기화했어요.")}><RefreshCw size={15} />지금 동기화</button>}</> : <>
           <div className="connection-explainer"><span className="google-calendar-icon">31</span><span>Google Calendar</span><ArrowRight size={14} /><span className="dots-logo"><i /><i /><i /></span><span>dots</span><ArrowRight size={14} /><strong>daylight</strong></div><h3 className="dialog-section-title">마일스톤만 캘린더에서 가져와요</h3><p className="dialog-description">dots에 Google Calendar와 daylight를 연결한 뒤, 아래 요청을 전달하세요. 선택한 캘린더의 일정은 이 공간의 모든 팀원에게 보입니다. 일일 할 일은 직접 작성하고 관리해요.</p><ol className="connection-steps"><li><strong>daylight 앱 연결</strong><span>ChatGPT의 플러그인에서 개인 → 내가 만든 항목 → daylight를 설치하거나 연결하세요.</span><a href="https://chatgpt.com/plugins" target="_blank" rel="noreferrer">플러그인 열기<ExternalLink size={12} /></a></li><li><strong>dots에 Google Calendar 연결</strong><span>dots의 연결된 앱에서 Google Calendar 사용 권한을 확인하세요.</span></li><li><strong>팀에 공유할 캘린더 지정</strong><label htmlFor="calendar-name">캘린더 이름 또는 ID</label><input id="calendar-name" value={calendarName} onChange={event => setCalendarName(event.target.value)} maxLength={300} placeholder="예: 팀 마일스톤" /></li></ol>{connectionPrompt && <textarea className="copy-prompt" value={connectionPrompt} readOnly rows={5} aria-label="dots에 전달할 요청" />}<button className="button primary full" disabled={!connectionPrompt} onClick={() => void copy(connectionPrompt, "요청을 복사했어요. dots 대화에 붙여넣어주세요.")}><Copy size={15} />dots에 전달할 요청 복사</button><p className="connection-footnote">직접 Google에 로그인하는 방식이 아닌 dots를 통한 동기화예요. 자동 실행은 별도 설정이 필요하며, 현재 예약된 작업은 없습니다.</p>
         </>}
         {!!data?.sources.length && <div className="connected-sources"><h3>마지막으로 가져온 캘린더</h3>{data.sources.map(source => {

@@ -1,6 +1,7 @@
 import type { Identity } from "./planner-core";
 import { PlannerError } from "./planner-core";
-import { calendarEventsScope, calendarListScope, selectGoogleCalendars, syncGoogleCalendar } from "./google-calendar";
+import { calendarEventsScope, calendarEditScope, calendarListScope, calendarMove, moveGoogleCalendarEvent, selectGoogleCalendars, syncGoogleCalendar } from "./google-calendar";
+import type { CalendarMove } from "./google-calendar";
 
 const sessionCookie = "__Host-daylight-session";
 const flowCookie = "__Host-daylight-google";
@@ -19,10 +20,10 @@ type Flow = {
   mac_state: string | null;
 };
 type Invite = { memberId?: string; subject?: string };
-type CalendarFlow = { sessionHash: string };
+type CalendarFlow = { sessionHash: string; requestEdit: number };
 type GoogleTokens = { id_token?: unknown; access_token?: unknown; refresh_token?: unknown; scope?: unknown; expires_in?: number; error?: string };
-type CalendarGrant = { accessToken: string; refreshToken: string };
-type CalendarConnection = { calendar_id: string; owner_id: string; google_sub: string; email: string; refresh_token: string };
+type CalendarGrant = { accessToken: string; refreshToken: string; canEdit: boolean };
+type CalendarConnection = { calendar_id: string; owner_id: string; google_sub: string; email: string; refresh_token: string; can_edit: number };
 
 function now() {
   return Math.floor(Date.now() / 1000);
@@ -94,9 +95,9 @@ export async function readCalendarGrant(headers: Pick<Headers, "get">, sessionHa
   const value = cookie(headers, calendarCookie);
   if (!value || value.length > 3800) return null;
   try {
-    const { accessToken, refreshToken, expiresAt } = JSON.parse(await openCalendarValue(value, sessionHash, secret));
+    const { accessToken, refreshToken, canEdit, expiresAt } = JSON.parse(await openCalendarValue(value, sessionHash, secret));
     return googleToken(accessToken) && googleToken(refreshToken, 512) && Number.isFinite(expiresAt) && expiresAt > now()
-      ? { accessToken, refreshToken } : null;
+      ? { accessToken, refreshToken, canEdit: canEdit === true } : null;
   } catch { return null; }
 }
 
@@ -104,21 +105,21 @@ function connectionBinding(calendarId: string, ownerId: string, googleSub: strin
   return JSON.stringify(["daylight/calendar-refresh/v1", calendarId, ownerId, googleSub]);
 }
 
-async function saveCalendarConnection(db: D1Database, user: Identity, googleSub: string, calendarId: string, refreshToken: string, secret: string) {
+async function saveCalendarConnection(db: D1Database, user: Identity, googleSub: string, calendarId: string, refreshToken: string, secret: string, canEdit: boolean) {
   const encrypted = await sealCalendarValue(refreshToken, connectionBinding(calendarId, user.userId, googleSub), secret);
   const saved = await db.prepare(
-    "INSERT INTO daylight_google_calendar_connections (calendar_id,owner_id,google_sub,email,refresh_token) VALUES (?,?,?,?,?) ON CONFLICT(owner_id,calendar_id) DO UPDATE SET google_sub=excluded.google_sub,email=excluded.email,refresh_token=excluded.refresh_token,enabled=1,locked_until=0,lease_id=NULL,last_error=NULL",
-  ).bind(calendarId, user.userId, googleSub, user.email, encrypted).run();
+    "INSERT INTO daylight_google_calendar_connections (calendar_id,owner_id,google_sub,email,refresh_token,can_edit) VALUES (?,?,?,?,?,?) ON CONFLICT(owner_id,calendar_id) DO UPDATE SET google_sub=excluded.google_sub,email=excluded.email,refresh_token=excluded.refresh_token,can_edit=excluded.can_edit,enabled=1,locked_until=0,lease_id=NULL,last_error=NULL",
+  ).bind(calendarId, user.userId, googleSub, user.email, encrypted, Number(canEdit)).run();
   if (!saved.meta.changes) throw new PlannerError("캘린더를 연결한 계정에서 다시 연결해 주세요.", 403);
 }
 
 export async function calendarSyncStatus(env: Cloudflare.Env, userId: string) {
   if (env.DAYLIGHT_AUTH_MODE !== "google" || !env.DB) return undefined;
   const connections = await env.DB.prepare(
-    "SELECT calendar_id,owner_id,enabled,last_error FROM daylight_google_calendar_connections WHERE owner_id=?",
-  ).bind(userId).all<{ calendar_id: string; owner_id: string; enabled: number; last_error: string | null }>();
+    "SELECT calendar_id,owner_id,enabled,can_edit,last_error FROM daylight_google_calendar_connections WHERE owner_id=?",
+  ).bind(userId).all<{ calendar_id: string; owner_id: string; enabled: number; can_edit: number; last_error: string | null }>();
   return connections.results.map(connection => ({ calendarId: connection.calendar_id, enabled: !!connection.enabled,
-    canManage: connection.owner_id === userId, error: connection.last_error }));
+    canManage: connection.owner_id === userId, canEdit: !!connection.can_edit && !!connection.enabled, error: connection.last_error }));
 }
 
 export async function syncSavedGoogleCalendars(env: Cloudflare.Env, ownerId?: string) {
@@ -136,16 +137,31 @@ export async function syncSavedGoogleCalendars(env: Cloudflare.Env, ownerId?: st
   if (failure) throw failure;
 }
 
-async function syncSavedGoogleCalendar(env: Cloudflare.Env, calendarId: string, ownerId: string) {
+export async function moveSavedGoogleEvent(env: Cloudflare.Env, user: Identity, input: Record<string, unknown>) {
+  const move = calendarMove(input);
+  if (env.DAYLIGHT_AUTH_MODE !== "google" || !env.DB || !await env.DB.prepare("SELECT 1 FROM milestones m JOIN daylight_google_calendar_connections c ON c.owner_id=m.owner_id AND c.calendar_id=m.calendar_id WHERE m.owner_id=? AND m.calendar_id=? AND m.event_id=? AND c.enabled=1")
+    .bind(user.userId, move.calendarId, move.eventId).first()) throw new PlannerError("연결한 본인의 캘린더 일정만 옮길 수 있어요.", 403);
+  if (move.start === move.newStart) return;
+  await syncSavedGoogleCalendar(env, move.calendarId, user.userId, move);
+}
+
+async function syncSavedGoogleCalendar(env: Cloudflare.Env, calendarId: string, ownerId: string, move?: CalendarMove) {
   const { DB: db, GOOGLE_CLIENT_ID: clientId, GOOGLE_CLIENT_SECRET: secret } = env;
-  if (env.DAYLIGHT_AUTH_MODE !== "google" || !db || !clientId || !secret) return;
+  if (env.DAYLIGHT_AUTH_MODE !== "google" || !db || !clientId || !secret) {
+    if (move) throw new PlannerError("Google 캘린더 연결 설정이 필요해요.", 503);
+    return;
+  }
   const lease = token();
   // The lease covers the bounded Google pagination and prevents overlapping imports.
   const connection = await db.prepare(
-    "UPDATE daylight_google_calendar_connections SET locked_until=?,lease_id=? WHERE calendar_id=? AND owner_id=? AND enabled=1 AND locked_until<=? RETURNING calendar_id,owner_id,google_sub,email,refresh_token",
+    "UPDATE daylight_google_calendar_connections SET locked_until=?,lease_id=? WHERE calendar_id=? AND owner_id=? AND enabled=1 AND locked_until<=? RETURNING calendar_id,owner_id,google_sub,email,refresh_token,can_edit",
   ).bind(now() + 300, lease, calendarId, ownerId, now()).first<CalendarConnection>();
-  if (!connection) return;
+  if (!connection) {
+    if (move) throw new PlannerError("캘린더 동기화 중이에요. 잠시 후 다시 옮겨 주세요.", 409);
+    return;
+  }
   try {
+    if (move && !connection.can_edit) throw new PlannerError("웹에서 Google 일정 이동 권한을 연결해 주세요.", 403);
     const invite = await inviteFor(env, connection);
     if (!invite || (invite.memberId ?? `google:${connection.google_sub}`) !== connection.owner_id) {
       throw new PlannerError("캘린더를 연결한 계정으로 Google 캘린더를 다시 연결해 주세요.", 428);
@@ -163,7 +179,7 @@ async function syncSavedGoogleCalendar(env: Cloudflare.Env, calendarId: string, 
     const tokens = await response.json() as GoogleTokens;
     if (tokens.error === "invalid_grant") throw new PlannerError("Google 캘린더 연결이 만료됐어요. 다시 연결해 주세요.", 428);
     if (!response.ok || !googleToken(tokens.access_token)
-        || (tokens.scope !== undefined && (typeof tokens.scope !== "string" || !tokens.scope.split(" ").includes(calendarEventsScope)))) {
+        || (tokens.scope !== undefined && (typeof tokens.scope !== "string" || !tokens.scope.split(" ").some(scope => [calendarEventsScope, calendarEditScope].includes(scope))))) {
       throw new PlannerError("Google 캘린더를 동기화하지 못했어요. 잠시 후 다시 시도해 주세요.", 502);
     }
     if (tokens.refresh_token !== undefined) {
@@ -172,9 +188,18 @@ async function syncSavedGoogleCalendar(env: Cloudflare.Env, calendarId: string, 
         connectionBinding(connection.calendar_id, connection.owner_id, connection.google_sub), secret);
       await db.prepare("UPDATE daylight_google_calendar_connections SET refresh_token=? WHERE lease_id=?").bind(rotated, lease).run();
     }
-    await syncGoogleCalendar(db, { userId: connection.owner_id, email: connection.email }, connection.calendar_id, tokens.access_token);
+    const user = { userId: connection.owner_id, email: connection.email };
+    const canEdit = !!connection.can_edit && (tokens.scope === undefined || (tokens.scope as string).split(" ").includes(calendarEditScope));
+    if (move) {
+      if (!canEdit) throw new PlannerError("웹에서 Google 일정 이동 권한을 다시 연결해 주세요.", 403);
+      await moveGoogleCalendarEvent(db, user, move, tokens.access_token);
+    } else {
+      const writable = await syncGoogleCalendar(db, user, connection.calendar_id, tokens.access_token);
+      await db.prepare("UPDATE daylight_google_calendar_connections SET can_edit=? WHERE lease_id=?").bind(Number(canEdit && writable), lease).run();
+    }
     await db.prepare("UPDATE daylight_google_calendar_connections SET last_error=NULL WHERE lease_id=?").bind(lease).run();
   } catch (error) {
+    if (move && error instanceof PlannerError && [400, 403, 409].includes(error.status)) throw error;
     const reconnect = error instanceof PlannerError && error.status === 428;
     await db.prepare("UPDATE daylight_google_calendar_connections SET enabled=?,last_error=? WHERE lease_id=?")
       .bind(reconnect ? 0 : 1, reconnect ? "reconnect" : "unavailable", lease).run();
@@ -353,8 +378,8 @@ export async function handleGoogleAuth(request: Request, env: Cloudflare.Env): P
       if (form.length > 24000) return reply("올바른 캘린더 선택이 아니에요.", 400);
       const ids = await selectGoogleCalendars(new URLSearchParams(form).getAll("calendarId"), grant.accessToken);
       for (const id of ids) {
-        await syncGoogleCalendar(db, calendarSession.user, id, grant.accessToken);
-        await saveCalendarConnection(db, calendarSession.user, calendarSession.googleSub, id, grant.refreshToken, clientSecret);
+        const writable = await syncGoogleCalendar(db, calendarSession.user, id, grant.accessToken);
+        await saveCalendarConnection(db, calendarSession.user, calendarSession.googleSub, id, grant.refreshToken, clientSecret, grant.canEdit && writable);
       }
       await db.prepare(`DELETE FROM daylight_google_calendar_connections WHERE owner_id=? AND calendar_id NOT IN (${ids.map(() => "?").join(",")})`)
         .bind(calendarSession.user.userId, ...ids).run();
@@ -374,9 +399,12 @@ export async function handleGoogleAuth(request: Request, env: Cloudflare.Env): P
       ];
       const scopes = ["openid", "email"];
       if (calendarSession) {
-        statements.push(db.prepare("INSERT INTO daylight_google_calendar_flows (state,session_hash) VALUES (?,?)")
-          .bind(state, calendarSession.sessionHash));
-        scopes.push(calendarEventsScope, calendarListScope);
+        const form = await request.text();
+        if (form.length > 1024) return reply("올바른 캘린더 연결 요청이 아니에요.", 400);
+        const edit = new URLSearchParams(form).get("edit") === "true";
+        statements.push(db.prepare("INSERT INTO daylight_google_calendar_flows (state,session_hash,request_edit) VALUES (?,?,?)")
+          .bind(state, calendarSession.sessionHash, Number(edit)));
+        scopes.push(edit ? calendarEditScope : calendarEventsScope, calendarListScope);
       }
       await db.batch(statements);
       const google = new URL("https://accounts.google.com/o/oauth2/v2/auth");
@@ -396,7 +424,7 @@ export async function handleGoogleAuth(request: Request, env: Cloudflare.Env): P
         return reply("daylight에서 Google 로그인을 다시 시작해 주세요.", 400);
       }
       const calendarFlow = await db.prepare(
-        "SELECT session_hash AS sessionHash FROM daylight_google_calendar_flows WHERE state=?",
+        "SELECT session_hash AS sessionHash,request_edit AS requestEdit FROM daylight_google_calendar_flows WHERE state=?",
       ).bind(state).first<CalendarFlow>();
       const flow = await db.prepare(
         "DELETE FROM daylight_google_flows WHERE state=? AND expires_at>? RETURNING verifier,nonce,mac_challenge,mac_state",
@@ -425,8 +453,8 @@ export async function handleGoogleAuth(request: Request, env: Cloudflare.Env): P
         }
         const scopes = typeof tokens?.scope === "string" ? tokens.scope.split(" ") : [];
         const accessToken = tokens?.access_token;
-        if (!scopes.includes(calendarEventsScope) || !scopes.includes(calendarListScope) || !googleToken(accessToken)) {
-          return reply("Google 캘린더 읽기 권한을 승인해 주세요.", 403);
+        if (!(calendarFlow.requestEdit ? scopes.includes(calendarEditScope) : scopes.some(scope => [calendarEventsScope, calendarEditScope].includes(scope))) || !scopes.includes(calendarListScope) || !googleToken(accessToken)) {
+          return reply(calendarFlow.requestEdit ? "Google 일정 수정 권한을 승인해 주세요." : "Google 캘린더 읽기 권한을 승인해 주세요.", 403);
         }
         const refreshToken = tokens?.refresh_token;
         if (!googleToken(refreshToken, 512)) {
@@ -434,7 +462,7 @@ export async function handleGoogleAuth(request: Request, env: Cloudflare.Env): P
         }
         const seconds = Math.min(flowSeconds, Math.floor(tokens?.expires_in ?? flowSeconds));
         if (!Number.isFinite(seconds) || seconds <= 0) return reply("Google 캘린더를 다시 연결해 주세요.", 401);
-        const grant = await sealCalendarGrant({ accessToken, refreshToken }, seconds, activeCalendarSession.sessionHash, clientSecret);
+        const grant = await sealCalendarGrant({ accessToken, refreshToken, canEdit: !!calendarFlow.requestEdit && scopes.includes(calendarEditScope) }, seconds, activeCalendarSession.sessionHash, clientSecret);
         return redirectTo("/calendar", setCookie(flowCookie, "", 0), grant);
       }
       if (flow.mac_challenge && flow.mac_state) {
