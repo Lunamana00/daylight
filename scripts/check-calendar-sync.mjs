@@ -184,6 +184,14 @@ try {
   let data = await readDay(db, account, today());
   assert.deepEqual(data.milestones.map(({ calendarId, eventId }) => ({ calendarId, eventId })), order);
   assert.ok(data.milestones.every(event => event.title === 'Milestone 2'));
+  const storedEvents = sqlite.prepare('SELECT * FROM milestones ORDER BY owner_id,calendar_id,event_id');
+  const unchangedEvents = storedEvents.all();
+  const writeCount = sqlite.prepare('SELECT total_changes() AS n');
+  const beforeRefresh = writeCount.get().n;
+  await syncSavedGoogleCalendars(env);
+  await readDay(db, account, today(), true);
+  assert.deepEqual(storedEvents.all(), unchangedEvents, 'Checking the same calendar preserves every saved event and its timestamp');
+  assert.ok(writeCount.get().n - beforeRefresh <= calendarIDs.length * 3, 'An unchanged sync only acquires/releases each lease and records the calendar check; opening the planner adds no writes');
   failingCalendar = calendarIDs[0];
   eventVersion = 3;
   await assert.rejects(syncSavedGoogleCalendars(env));

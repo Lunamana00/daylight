@@ -6,7 +6,7 @@ export type Task = { id: string; ownerId: string; date: string; endDate: string 
 export type BacklogItem = { id: string; title: string; sortOrder: number; taskId: string | null; taskTitle: string | null; taskDate: string | null; taskEndDate: string | null; projectId: string | null; projectTitle: string | null; projectHue: number | null; subtask?: number; done?: number };
 export type TaskProject = { id: string; title: string };
 export type Note = { ownerId: string; date: string; content: string; updatedAt: string; ownerName: string };
-export type Milestone = { ownerId: string; calendarId: string; eventId: string; title: string; date: string; url: string | null; ownerName: string; sourceName: string; syncedAt: string; startAt?: string | null; endAt?: string | null; endDate?: string | null };
+export type Milestone = { ownerId: string; calendarId: string; eventId: string; title: string; date: string; url: string | null; ownerName: string; sourceName: string; syncedAt: string; sourceSyncedAt: string; startAt?: string | null; endAt?: string | null; endDate?: string | null };
 export type Source = { ownerId: string; calendarId: string; name: string; syncedAt: string; ownerName: string };
 export type DayData = { date: string; me: Member; members: Member[]; tasks: Task[]; projects?: TaskProject[]; notes: Note[]; milestones: Milestone[]; sources: Source[]; calendarSync?: Array<{ calendarId: string; enabled: boolean; canManage: boolean; canEdit?: boolean; error: string | null }> };
 export type CalendarData = { from: string; to: string; tasks: Task[]; milestones: Milestone[] };
@@ -38,7 +38,7 @@ function bool(value: unknown): number {
   return value ? 1 : 0;
 }
 export async function ensureMember(db: D1Database, user: Identity) {
-  await db.prepare("INSERT INTO members (id,name,email,joined_at) VALUES (?,?,?,?) ON CONFLICT(id) DO UPDATE SET email=excluded.email")
+  await db.prepare("INSERT INTO members (id,name,email,joined_at) VALUES (?,?,?,?) ON CONFLICT(id) DO UPDATE SET email=excluded.email WHERE members.email IS NOT excluded.email")
     .bind(user.userId, (user.fullName || user.email.split("@")[0]).slice(0, 40), user.email, new Date().toISOString()).run();
 }
 async function readTasks(db: D1Database, from: string, to: string, ownerId: string | null = null, projectOwnerId = ownerId): Promise<Task[]> {
@@ -176,7 +176,7 @@ export function widgetWeekPlan(data: DayData, calendar: CalendarData) {
 export async function listMilestones(db: D1Database, from: string, to: string, ownerId?: string) {
   day(from); day(to);
   if (to < from || to > addDays(from, 366)) throw new PlannerError("마일스톤 조회 기간은 1년 이내로 선택해주세요.");
-  const result = await db.prepare("SELECT m.owner_id AS ownerId,m.calendar_id AS calendarId,m.event_id AS eventId,m.title,m.date,m.url,m.start_at AS startAt,m.end_at AS endAt,m.end_date AS endDate,m.synced_at AS syncedAt,p.name AS ownerName,s.name AS sourceName FROM milestones m JOIN members p ON p.id=m.owner_id JOIN calendar_sources s ON s.calendar_id=m.calendar_id AND (? IS NULL OR s.owner_id=m.owner_id) LEFT JOIN milestone_order o ON o.calendar_id=m.calendar_id AND o.event_id=m.event_id WHERE COALESCE(m.end_date,m.date)>=? AND m.date<=? AND (? IS NULL OR m.owner_id=?) ORDER BY o.position IS NULL,o.position,m.date,m.start_at,m.title,m.calendar_id,m.event_id LIMIT 1000").bind(ownerId ?? null, from, to, ownerId ?? null, ownerId ?? null).all<Milestone>();
+  const result = await db.prepare("SELECT m.owner_id AS ownerId,m.calendar_id AS calendarId,m.event_id AS eventId,m.title,m.date,m.url,m.start_at AS startAt,m.end_at AS endAt,m.end_date AS endDate,m.synced_at AS syncedAt,s.synced_at AS sourceSyncedAt,p.name AS ownerName,s.name AS sourceName FROM milestones m JOIN members p ON p.id=m.owner_id JOIN calendar_sources s ON s.calendar_id=m.calendar_id AND (? IS NULL OR s.owner_id=m.owner_id) LEFT JOIN milestone_order o ON o.calendar_id=m.calendar_id AND o.event_id=m.event_id WHERE COALESCE(m.end_date,m.date)>=? AND m.date<=? AND (? IS NULL OR m.owner_id=?) ORDER BY o.position IS NULL,o.position,m.date,m.start_at,m.title,m.calendar_id,m.event_id LIMIT 1000").bind(ownerId ?? null, from, to, ownerId ?? null, ownerId ?? null).all<Milestone>();
   return result.results;
 }
 export async function readDay(db: D1Database, user: Identity, date: string, personalCalendars = false): Promise<DayData> {
@@ -422,11 +422,21 @@ export async function syncMilestones(db: D1Database, user: Identity, input: Reco
   });
   await ensureMember(db, user);
   const now = new Date().toISOString();
-  // D1 batch is atomic: failed insertion never erases the previous snapshot.
+  // A successful check advances the source timestamp. Unchanged events keep their last saved timestamp.
   await db.batch([
-    db.prepare("INSERT INTO calendar_sources (owner_id,calendar_id,name,synced_at) VALUES (?,?,?,?) ON CONFLICT DO UPDATE SET owner_id=excluded.owner_id,name=excluded.name,synced_at=excluded.synced_at").bind(user.userId, calendarId, name, now),
-    db.prepare("DELETE FROM milestones WHERE calendar_id=? AND COALESCE(end_date,date)>=? AND date<=? AND (? IS NULL OR owner_id=?)").bind(calendarId, from, to, personalCalendar ? user.userId : null, personalCalendar ? user.userId : null),
-    ...events.map(event => db.prepare("INSERT INTO milestones (owner_id,calendar_id,event_id,title,date,url,synced_at,start_at,end_at,end_date) VALUES (?,?,?,?,?,?,?,?,?,?) ON CONFLICT DO UPDATE SET owner_id=excluded.owner_id,title=excluded.title,date=excluded.date,url=excluded.url,synced_at=excluded.synced_at,start_at=excluded.start_at,end_at=excluded.end_at,end_date=excluded.end_date").bind(user.userId, calendarId, event.eventId, event.title, event.date, event.url, now, event.startAt, event.endAt, event.endDate)),
+    db.prepare(`INSERT INTO calendar_sources (owner_id,calendar_id,name,synced_at) VALUES (?,?,?,?)
+      ON CONFLICT DO UPDATE SET ${personalCalendar ? "" : "owner_id=excluded.owner_id,"}name=excluded.name,synced_at=excluded.synced_at`)
+      .bind(user.userId, calendarId, name, now),
+    db.prepare(`DELETE FROM milestones WHERE calendar_id=? AND COALESCE(end_date,date)>=? AND date<=?
+      AND event_id NOT IN (SELECT value FROM json_each(?)) ${personalCalendar ? "AND owner_id=?" : ""}`)
+      .bind(calendarId, from, to, JSON.stringify([...seen]), ...(personalCalendar ? [user.userId] : [])),
+    ...events.map(event => db.prepare(`INSERT INTO milestones (owner_id,calendar_id,event_id,title,date,url,synced_at,start_at,end_at,end_date)
+      VALUES (?,?,?,?,?,?,?,?,?,?) ON CONFLICT DO UPDATE SET
+        owner_id=excluded.owner_id,title=excluded.title,date=excluded.date,url=excluded.url,
+        start_at=excluded.start_at,end_at=excluded.end_at,end_date=excluded.end_date,synced_at=excluded.synced_at
+      WHERE (milestones.owner_id,milestones.title,milestones.date,milestones.url,milestones.start_at,milestones.end_at,milestones.end_date)
+        IS NOT (excluded.owner_id,excluded.title,excluded.date,excluded.url,excluded.start_at,excluded.end_at,excluded.end_date)`)
+      .bind(user.userId, calendarId, event.eventId, event.title, event.date, event.url, now, event.startAt, event.endAt, event.endDate)),
   ]);
   return { count: events.length, from, to, syncedAt: now, message: "팀 공통 마일스톤을 갱신했습니다. 일일 할 일은 변경하지 않았습니다." };
 }

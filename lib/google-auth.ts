@@ -190,14 +190,16 @@ async function syncSavedGoogleCalendar(env: Cloudflare.Env, calendarId: string, 
     }
     const user = { userId: connection.owner_id, email: connection.email };
     const canEdit = !!connection.can_edit && (tokens.scope === undefined || (tokens.scope as string).split(" ").includes(calendarEditScope));
+    let nextCanEdit = connection.can_edit;
     if (move) {
       if (!canEdit) throw new PlannerError("웹에서 Google 일정 이동 권한을 다시 연결해 주세요.", 403);
       await moveGoogleCalendarEvent(db, user, move, tokens.access_token);
     } else {
       const writable = await syncGoogleCalendar(db, user, connection.calendar_id, tokens.access_token);
-      await db.prepare("UPDATE daylight_google_calendar_connections SET can_edit=? WHERE lease_id=?").bind(Number(canEdit && writable), lease).run();
+      nextCanEdit = Number(canEdit && writable);
     }
-    await db.prepare("UPDATE daylight_google_calendar_connections SET last_error=NULL WHERE lease_id=?").bind(lease).run();
+    await db.prepare("UPDATE daylight_google_calendar_connections SET can_edit=?,last_error=NULL WHERE lease_id=? AND (can_edit<>? OR last_error IS NOT NULL)")
+      .bind(nextCanEdit, lease, nextCanEdit).run();
   } catch (error) {
     if (move && error instanceof PlannerError && [400, 403, 409].includes(error.status)) throw error;
     const reconnect = error instanceof PlannerError && error.status === 428;
