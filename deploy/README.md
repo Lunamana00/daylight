@@ -2,7 +2,7 @@
 
 ## Set up the Google server
 
-1. Sign in to Wrangler with the Cloudflare account for daylight.
+1. Sign in to Wrangler with the Cloudflare account for Dailog.
 2. Create a D1 database for the Google deployment. Copy `wrangler.google.example.jsonc` to `wrangler.google.jsonc` in this directory.
 3. Set the D1 database name and ID in the config. Set `DAYLIGHT_GOOGLE_ORIGIN` to the HTTPS origin of the new Worker. Use the origin without a trailing slash.
 4. Create a **Web application** OAuth client in Google Cloud. Set its redirect URI to the Worker origin followed by `/auth/google/callback`.
@@ -50,19 +50,19 @@ Invitations are saved in D1. They apply to the web and Mac app. Only the owner c
 
 Basic Google sign-in uses only `openid` and `email`. Calendar access has a separate consent flow. While the Google OAuth app is in Testing, a new person needs to be added to the Google test user list before they can connect their calendar.
 
-To use daylight invitations without a separate Google test user list, publish the Google OAuth app as **In production**. Set its homepage to the Worker origin. Set its privacy policy to `/privacy` and its terms to `/terms` on the same origin. Review the public contact details before publication. The app still permits invited accounts only. Each person must consent to calendar access. Google can show an unverified-app warning and apply a 100-user limit until verification is complete.
+To use Dailog invitations without a separate Google test user list, publish the Google OAuth app as **In production**. Set its homepage to the Worker origin. Set its privacy policy to `/privacy` and its terms to `/terms` on the same origin. Review the public contact details before publication. The app still permits invited accounts only. Each person must consent to calendar access. Google can show an unverified-app warning and apply a 100-user limit until verification is complete.
 
 ## Connect personal calendars
 
 1. Enable Google Calendar API in the Google Cloud project. If the OAuth app is in Testing, add the Google account as a test user.
-2. Open **설정** in daylight. Select **Google 캘린더 선택**. Grant read access and background access in Google.
-3. Select up to 20 calendars. Select **선택한 캘린더 자동 동기화** to import this week and the next 90 days. Only your account can read these events in daylight.
+2. Open **설정** in Dailog. Select **Google 캘린더 선택**. Grant read access and background access in Google.
+3. Select up to 20 calendars. Select **선택한 캘린더 자동 동기화** to import this week and the next 90 days. Only your account can read these events in Dailog.
 4. The server updates the selected calendars every five minutes. Select **지금 동기화** on the web or the refresh button in the Mac widget for an immediate update.
-5. Use **캘린더 선택·다시 연결** to change the selected calendars. Clear a checkbox or select **자동 동기화 해제** to stop updates for a calendar. Imported events remain in daylight. Only the account that connected a calendar can change its connection.
+5. Use **캘린더 선택·다시 연결** to change the selected calendars. Clear a checkbox or select **자동 동기화 해제** to stop updates for a calendar. Imported events remain in Dailog. Only the account that connected a calendar can change its connection.
 
 The server encrypts Google refresh tokens with a key derived from `GOOGLE_CLIENT_SECRET`. Keep that secret stable. If you change it, connect the calendars again. Failed calendar imports keep the last saved events. Daily tasks and the saved event order do not change during an import.
 
-Google refresh tokens expire after seven days when the OAuth app is in Testing. Connect the calendars again when daylight shows **Google 다시 연결 필요**. Production OAuth configuration can require Google verification. The daylight account invite list controls access separately.
+Google refresh tokens expire after seven days when the OAuth app is in Testing. Connect the calendars again when Dailog shows **Google 다시 연결 필요**. Production OAuth configuration can require Google verification. The Dailog account invite list controls access separately.
 
 ## GitHub record storage
 
@@ -93,7 +93,7 @@ To build the app from source:
 1. Install Xcode 26 or later. Open `macos/Daylight.xcodeproj` in Xcode.
 2. Select the same Apple signing team for **Daylight** and **DaylightWidget**. Set `DAYLIGHT_SERVER_URL` in the **Daylight** build settings to the Google Worker origin.
 3. Run **Daylight**. Select **Google로 로그인** and use an invited account. The app places a 1000 by 500 calendar on the desktop, below normal app windows. Drag the date area to move it. Drag the lower-right handle to change its size. The minimum size is 720 by 360. The app saves the frame. It uses a clear glass background and a menu bar icon.
-4. To add the separate system widget, open **Edit Widgets** on the desktop. Add **daylight 주간 달력**. Select the extra-large size for today and the next three days. Select **Clear** in the Mac appearance settings for the system glass style.
+4. To add the separate system widget, open **Edit Widgets** on the desktop. Add **Dailog 주간 달력**. Select the extra-large size for today and the next three days. Select **Clear** in the Mac appearance settings for the system glass style.
 
 The widget supports medium, large, and extra-large sizes. The extra-large size shows a four-day time grid. Today has a wider column. Tasks and all-day events appear above the grid. Timed events use their Google start and end times. Use the time arrows to show other hours. The other sizes show a week strip and the selected day's details. The app reads this week and at least three days after today through `/api/planner?view=widget`. Each day contains only its scheduled tasks and the owner's Google events. Titles wrap. Page buttons show remaining items. Today’s tasks support completion changes. Other dates open the web planner. The header shows the full completion count for today. Right-click the widget and select **Edit Widget** to change **Google 일정 표시**. The Mac app holds the session in Keychain. A completion check runs in the Mac app and changes the same task on the Worker.
 
@@ -113,7 +113,7 @@ xcodebuild -project macos/Daylight.xcodeproj -scheme Daylight \
   ENABLE_HARDENED_RUNTIME=YES CODE_SIGN_INJECT_BASE_ENTITLEMENTS=NO build
 ```
 
-Copy only `outputs/macos-release/Build/Products/Release/daylight.app` into the disk image. Use `ditto` to preserve the app bundle. Add a link to `/Applications` and the installation guide. Do not include local caches or login data. Upload the disk image and its SHA-256 checksum to a GitHub prerelease.
+Copy only `outputs/macos-release/Build/Products/Release/Dailog.app` into the disk image. Use `ditto` to preserve the app bundle. Add a link to `/Applications` and the installation guide. Do not include local caches or login data. Upload the disk image and its SHA-256 checksum to a GitHub prerelease.
 
 The app stores its session in the file-based Keychain. The widget receives display data through the app group. It does not receive the session. This beta does not require a device provisioning profile. An update from an older development build requires Google sign-in again.
 

@@ -6,17 +6,17 @@ struct DaylightApp: App {
     @NSApplicationDelegateAdaptor(DesktopCalendarAppDelegate.self) private var desktop
 
     var body: some Scene {
-        MenuBarExtra("daylight", systemImage: "sun.max") {
+        MenuBarExtra("Dailog", systemImage: "sun.max") {
             Button("바탕화면 달력 표시") { desktop.showCalendar() }
             Button("달력 숨기기") { desktop.panel?.orderOut(nil) }
             Divider()
             Button("동기화") { Task { try? await PlannerConnection.shared.synchronize() } }
             if let server = Daylight.server {
-                Button("daylight 웹 열기") { NSWorkspace.shared.open(server) }
+                Button("Dailog 웹 열기") { NSWorkspace.shared.open(server) }
                 Button("Google 일정 이동 연결…") { NSWorkspace.shared.open(server.appending(path: "calendar/edit")) }
             }
             Divider()
-            Button("daylight 종료") { NSApplication.shared.terminate(nil) }
+            Button("Dailog 종료") { NSApplication.shared.terminate(nil) }
         }
     }
 }
@@ -43,7 +43,7 @@ final class DesktopCalendarAppDelegate: NSObject, NSApplicationDelegate, NSWindo
         let visible = screen.visibleFrame
         let frame = DaylightDesktopLayout.fitted(CGRect(x: visible.minX + 24, y: visible.maxY - 524, width: 1000, height: 500), in: visible)
         let panel = DesktopCalendarPanel(contentRect: frame, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
-        panel.title = "daylight 바탕화면 달력"
+        panel.title = "Dailog 바탕화면 달력"
         panel.identifier = NSUserInterfaceItemIdentifier("desktop-calendar")
         panel.isReleasedWhenClosed = false
         panel.isOpaque = false

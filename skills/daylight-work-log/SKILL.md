@@ -1,9 +1,9 @@
 ---
 name: daylight-work-log
-description: Explain the manual daylight work-record workflow. Automatic ChatGPT and Codex collection is paused.
+description: Explain the manual Dailog work-record workflow. Automatic ChatGPT and Codex collection is paused.
 ---
 
-# daylight work records
+# Dailog work records
 
 Automatic collection is paused. Do not read conversations, create a collector connection, import outcomes, or schedule collection for this skill. The collector endpoint returns HTTP 410.
 

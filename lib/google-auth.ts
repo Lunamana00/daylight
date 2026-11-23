@@ -317,7 +317,7 @@ export async function handleInvitations(request: Request, env: Cloudflare.Env): 
     if (env.DAYLIGHT_AUTH_MODE !== "google" || !env.DB) throw new PlannerError("초대 기능을 사용할 수 없습니다.", 404);
     if (!["GET", "POST"].includes(request.method)) throw new PlannerError("지원하지 않는 요청입니다.", 405);
     if (request.method === "POST" && request.headers.get("origin") !== new URL(request.url).origin) {
-      throw new PlannerError("daylight에서 초대해 주세요.", 403);
+      throw new PlannerError("Dailog에서 초대해 주세요.", 403);
     }
     const session = await getGoogleSession(request.headers, env);
     if (!session) throw new PlannerError("로그인이 필요합니다.", 401);
@@ -360,10 +360,10 @@ export async function handleGoogleAuth(request: Request, env: Cloudflare.Env): P
     const calendarDisconnect = request.method === "POST" && url.pathname === "/auth/google/calendar/disconnect";
     const calendarRequest = calendarStart || calendarSelection || calendarDisconnect;
     if (calendarRequest && request.headers.get("origin") !== url.origin) {
-      return reply("daylight에서 캘린더를 연결해 주세요.", 403);
+      return reply("Dailog에서 캘린더를 연결해 주세요.", 403);
     }
     const calendarSession = calendarRequest ? await getGoogleSession(request.headers, env) : null;
-    if (calendarRequest && !calendarSession) return reply("daylight에 먼저 로그인해 주세요.", 401);
+    if (calendarRequest && !calendarSession) return reply("Dailog에 먼저 로그인해 주세요.", 401);
 
     if (calendarDisconnect && calendarSession) {
       const body = await request.text();
@@ -375,7 +375,7 @@ export async function handleGoogleAuth(request: Request, env: Cloudflare.Env): P
 
     if (calendarSelection && calendarSession) {
       const grant = await readCalendarGrant(request.headers, calendarSession.sessionHash, clientSecret);
-      if (!grant) return reply("캘린더 연결 시간이 지났어요. daylight에서 다시 시작해 주세요.", 401);
+      if (!grant) return reply("캘린더 연결 시간이 지났어요. Dailog에서 다시 시작해 주세요.", 401);
       const form = await request.text();
       if (form.length > 24000) return reply("올바른 캘린더 선택이 아니에요.", 400);
       const ids = await selectGoogleCalendars(new URLSearchParams(form).getAll("calendarId"), grant.accessToken);
@@ -423,7 +423,7 @@ export async function handleGoogleAuth(request: Request, env: Cloudflare.Env): P
       const state = url.searchParams.get("state");
       const code = url.searchParams.get("code");
       if (!isToken(state) || state !== cookie(request.headers, flowCookie) || (code?.length ?? 0) > 2048) {
-        return reply("daylight에서 Google 로그인을 다시 시작해 주세요.", 400);
+        return reply("Dailog에서 Google 로그인을 다시 시작해 주세요.", 400);
       }
       const calendarFlow = await db.prepare(
         "SELECT session_hash AS sessionHash,request_edit AS requestEdit FROM daylight_google_calendar_flows WHERE state=?",
@@ -438,7 +438,7 @@ export async function handleGoogleAuth(request: Request, env: Cloudflare.Env): P
       }
       if (!code) return calendarFlow
         ? redirectTo("/", setCookie(flowCookie, "", 0))
-        : reply("daylight에서 Google 로그인을 다시 시작해 주세요.", 400);
+        : reply("Dailog에서 Google 로그인을 다시 시작해 주세요.", 400);
       const google = await fetch("https://oauth2.googleapis.com/token", {
         method: "POST", redirect: "manual", signal: AbortSignal.timeout(10_000),
         body: new URLSearchParams({
@@ -451,7 +451,7 @@ export async function handleGoogleAuth(request: Request, env: Cloudflare.Env): P
       if (!account) return reply("초대된 Google 계정으로 로그인해 주세요.", 403);
       if (calendarFlow && activeCalendarSession) {
         if (account.google_sub !== activeCalendarSession.googleSub) {
-          return reply("daylight에 로그인한 Google 계정으로 캘린더를 연결해 주세요.", 403);
+          return reply("Dailog에 로그인한 Google 계정으로 캘린더를 연결해 주세요.", 403);
         }
         const scopes = typeof tokens?.scope === "string" ? tokens.scope.split(" ") : [];
         const accessToken = tokens?.access_token;

@@ -19,7 +19,7 @@ export type WorkGithubState = { connection: WorkGithubConnection | null; version
 export type WorkCatalog = { artifacts: WorkArtifact[]; pending: number };
 export type WorkDetail = { stages: WorkStage[]; entries: WorkEntry[]; nextCursor: string | null; tasks: WorkTask[]; connections: WorkConnection[] };
 export const workKinds: Record<WorkKind, string> = { plan: "할 예정", decision: "결정", progress: "진행", result: "결과" };
-export const workProviders: Record<WorkProvider, string> = { manual: "직접 기록", daylight: "daylight", codex: "Codex", chatgpt: "ChatGPT" };
+export const workProviders: Record<WorkProvider, string> = { manual: "직접 기록", daylight: "Dailog", codex: "Codex", chatgpt: "ChatGPT" };
 export const workSummaryFields = [
   { key: "background", label: "문제와 배경", placeholder: "어떤 문제에서 시작했나요?" },
   { key: "contribution", label: "내 역할·기여", placeholder: "직접 맡은 일과 기여한 부분" },

@@ -10,7 +10,7 @@ export default async function Home() {
   if (googleLogin) {
     if (!await getDaylightSession(await headers())) {
       return <main className="welcome-page">
-        <header className="welcome-brand"><img src="/favicon.svg" width="28" height="28" alt="" /><h1>daylight</h1></header>
+        <header className="welcome-brand"><img src="/favicon.svg" width="28" height="28" alt="" /><h1>Dailog</h1></header>
         <p>할 일, 개인 일정, 프로젝트 기록을 한곳에서 정리합니다.</p>
         <ul>
           <li>직접 정한 할 일과 하위 항목을 기록합니다.</li>

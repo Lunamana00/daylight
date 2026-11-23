@@ -4,7 +4,7 @@ import SwiftUI
 import WidgetKit
 
 struct DaylightWidgetOptions: WidgetConfigurationIntent {
-    static let title: LocalizedStringResource = "daylight 표시 설정"
+    static let title: LocalizedStringResource = "Dailog 표시 설정"
     @Parameter(title: "Google 일정 표시", default: true) var showCalendar: Bool
 }
 
@@ -66,7 +66,7 @@ struct DaylightWidgetView: View {
             } else {
                 VStack(alignment: .leading, spacing: 8) {
                     HStack(spacing: 7) {
-                        Image(systemName: "sun.max").widgetAccentable().accessibilityLabel("daylight")
+                        Image(systemName: "sun.max").widgetAccentable().accessibilityLabel("Dailog")
                         Text(Daylight.shortDate(Daylight.dayKey(entry.date))).font(.headline)
                         Spacer(minLength: 4)
                         Link(destination: Daylight.openCalendar) { Image(systemName: "arrow.up.left.and.arrow.down.right").frame(width: 22, height: 24) }
@@ -76,7 +76,7 @@ struct DaylightWidgetView: View {
                         }
                         Button(intent: SyncDaylight()) {
                             Image(systemName: "arrow.clockwise").frame(width: 24, height: 24)
-                        }.buttonStyle(.plain).accessibilityLabel("daylight 동기화")
+                        }.buttonStyle(.plain).accessibilityLabel("Dailog 동기화")
                     }
                     if let snapshot = entry.snapshot {
                         let days = Array(snapshot.calendarDays.prefix(7))
@@ -93,7 +93,7 @@ struct DaylightWidgetView: View {
                         }
                     } else {
                         Spacer(minLength: 0)
-                        Link("daylight 열기", destination: Daylight.openApp).font(.caption.weight(.semibold))
+                        Link("Dailog 열기", destination: Daylight.openApp).font(.caption.weight(.semibold))
                         Spacer(minLength: 0)
                     }
                 }
@@ -194,7 +194,7 @@ private struct DaylightFourDayCalendar: View {
                     }
                     Button(intent: SyncDaylight()) {
                         Image(systemName: "arrow.clockwise").frame(width: 24, height: 22)
-                    }.accessibilityLabel("daylight 동기화")
+                    }.accessibilityLabel("Dailog 동기화")
                 }.font(.system(size: 11, weight: .medium)).buttonStyle(.plain)
             }
         }
@@ -411,7 +411,7 @@ struct DaylightWidget: Widget {
         AppIntentConfiguration(kind: Daylight.widgetKind, intent: DaylightWidgetOptions.self, provider: DaylightProvider()) { entry in
             DaylightWidgetView(entry: entry)
         }
-        .configurationDisplayName("daylight 주간 달력")
+        .configurationDisplayName("Dailog 주간 달력")
         .description("오늘부터 4일의 시간표와 할 일. 실제 일정 시간에 맞춰 표시합니다.")
         .supportedFamilies([.systemMedium, .systemLarge, .systemExtraLarge])
     }

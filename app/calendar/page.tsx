@@ -22,7 +22,7 @@ export default async function CalendarPage() {
   const grant = await readCalendarGrant(requestHeaders, session.sessionHash, secret);
   let choices: Awaited<ReturnType<typeof listGoogleCalendarChoices>> = [];
   let message = "";
-  if (!grant) message = "캘린더 연결 시간이 지났어요. daylight에서 다시 시작해 주세요.";
+  if (!grant) message = "캘린더 연결 시간이 지났어요. Dailog에서 다시 시작해 주세요.";
   else {
     try { choices = await listGoogleCalendarChoices(grant.accessToken); }
     catch (error) { message = error instanceof PlannerError ? error.message : "Google 캘린더 목록을 읽지 못했어요."; }
@@ -32,7 +32,7 @@ export default async function CalendarPage() {
   for (const [, name] of choices) names.set(name, (names.get(name) ?? 0) + 1);
 
   return <main className="mx-auto flex max-w-lg flex-col gap-5">
-    <a className="text-button self-start" href="/">← daylight</a>
+    <a className="text-button self-start" href="/">← Dailog</a>
     <h1>내 캘린더 선택</h1>
     {message ? <p role="status">{message}</p> : <form className="flex flex-col gap-4" method="post" action="/auth/google/calendar/sync">
       <fieldset className="flex flex-col gap-3">

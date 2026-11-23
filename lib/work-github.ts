@@ -31,12 +31,12 @@ async function request<T>(token: string, path: string, method = "GET", body?: un
       headers: { Authorization: `Bearer ${token}`, Accept: "application/vnd.github+json", "X-GitHub-Api-Version": "2026-03-10", "User-Agent": "daylight-work-records", ...(body ? { "Content-Type": "application/json" } : {}) },
       body: body ? JSON.stringify(body) : undefined,
     });
-  } catch { throw new PlannerError("GitHub에 연결하지 못했어요. 입력한 기록은 daylight에 남아 있어요.", 502); }
+  } catch { throw new PlannerError("GitHub에 연결하지 못했어요. 입력한 기록은 Dailog에 남아 있어요.", 502); }
   if (!response.ok) {
     await response.body?.cancel();
     if (response.status === 401 || response.status === 403 || response.status === 404) throw new PlannerError("GitHub 연결 권한·만료일을 확인해 주세요. 선택한 저장소에 Contents 읽기·쓰기 권한이 필요해요.", 403);
     if (response.status === 409 || response.status === 422) throw new PlannerError("GitHub 저장소가 변경됐거나 저장이 제한됐어요. README가 있는 저장소인지 확인하고 다시 저장해 주세요.", 409);
-    throw new PlannerError("GitHub 저장에 실패했어요. 입력한 기록은 daylight에 남아 있어요.", 502);
+    throw new PlannerError("GitHub 저장에 실패했어요. 입력한 기록은 Dailog에 남아 있어요.", 502);
   }
   return await response.json() as T;
 }
@@ -142,7 +142,7 @@ export async function saveWorkGithub(db: D1Database, ownerId: string, entryId: u
   const nextTree = await request<{ sha: string }>(token, `/repos/${connection.repository}/git/trees`, "POST", { base_tree: branch.commit.commit.tree.sha, tree });
   let commitSha = branch.commit.sha;
   if (nextTree.sha !== branch.commit.commit.tree.sha) {
-    const commit = await request<{ sha: string }>(token, `/repos/${connection.repository}/git/commits`, "POST", { message: `daylight: ${artifact.title} / ${entry.title}`, tree: nextTree.sha, parents: [branch.commit.sha] });
+    const commit = await request<{ sha: string }>(token, `/repos/${connection.repository}/git/commits`, "POST", { message: `Dailog: ${artifact.title} / ${entry.title}`, tree: nextTree.sha, parents: [branch.commit.sha] });
     await request(token, `/repos/${connection.repository}/git/refs/heads/${connection.branch.split("/").map(encodeURIComponent).join("/")}`, "PATCH", { sha: commit.sha, force: false });
     commitSha = commit.sha;
   }

@@ -11,7 +11,7 @@ const worker = {
     if (env.DAYLIGHT_AUTH_MODE === "google") {
       const url = new URL(request.url);
       if (url.origin !== env.DAYLIGHT_GOOGLE_ORIGIN) {
-        return new Response("daylight 주소를 확인해 주세요.", { status: 421 });
+        return new Response("Dailog 주소를 확인해 주세요.", { status: 421 });
       }
       if (url.pathname.startsWith("/auth/google/")) return handleGoogleAuth(request, env);
     }

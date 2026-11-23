@@ -7,7 +7,7 @@ export const privateHeaders = { "Cache-Control": "private, no-store", "X-Content
 export async function workAccess(request: Request, allowCollector = false) {
   if (!env.DB) throw new Error("Missing DB");
   if (allowCollector && request.headers.has("authorization")) {
-    throw new PlannerError("자동 수집은 보류 중입니다. daylight에서 직접 자료를 추가해 주세요.", 410);
+    throw new PlannerError("자동 수집은 보류 중입니다. Dailog에서 직접 자료를 추가해 주세요.", 410);
   }
   const session = await getDaylightSession(request.headers);
   if (!session) throw new PlannerError("로그인이 필요합니다.", 401);

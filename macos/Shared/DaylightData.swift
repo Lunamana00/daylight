@@ -177,11 +177,11 @@ enum DaylightError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .signIn: "Google 계정으로 로그인해 주세요."
-        case .unavailable: "daylight에 연결하지 못했습니다."
+        case .unavailable: "Dailog에 연결하지 못했습니다."
         case .stale: "목록이 바뀌었습니다. 새로고침 후 다시 시도해 주세요."
         case .busy: "동기화 중입니다. 잠시 후 다시 시도해 주세요."
         case .appGroup: "앱과 위젯의 공유 저장소를 열 수 없습니다."
-        case .server: "daylight 서버 주소를 설정해 주세요."
+        case .server: "Dailog 서버 주소를 설정해 주세요."
         case .keychain: "Mac 키체인에 로그인 정보를 저장할 수 없습니다."
         case .calendar: "웹에서 Google 캘린더를 다시 연결해 주세요."
         case .rejected(let message): message

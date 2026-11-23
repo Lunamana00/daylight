@@ -33,7 +33,7 @@ final class PlannerConnection: NSObject, ObservableObject, ASWebAuthenticationPr
         login = server.flatMap { SessionVault.read(for: $0) }
         signedIn = login?.isActive == true
         if signedIn, let cached = DaylightCache.read(), cached.date == Daylight.dayKey() { plan = cached }
-        status = server == nil ? "daylight 서버 주소를 설정해 주세요." : signedIn ? "동기화 중" : "Google 로그인 필요"
+        status = server == nil ? "Dailog 서버 주소를 설정해 주세요." : signedIn ? "동기화 중" : "Google 로그인 필요"
         refreshTimer = Timer.scheduledTimer(withTimeInterval: 180, repeats: true) { [weak self] _ in
             Task { @MainActor in await self?.refresh() }
         }
@@ -244,7 +244,7 @@ final class PlannerConnection: NSObject, ObservableObject, ASWebAuthenticationPr
         if let cancellation = error as? ASWebAuthenticationSessionError, cancellation.code == .canceledLogin {
             status = "Google 로그인 필요"
         } else {
-            status = (error as? DaylightError)?.errorDescription ?? "daylight에 연결하지 못했습니다."
+            status = (error as? DaylightError)?.errorDescription ?? "Dailog에 연결하지 못했습니다."
         }
     }
 

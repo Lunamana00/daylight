@@ -149,7 +149,7 @@ function WorkDetailView({ artifact, artifacts, task, onClearTask, onOpenTask, on
         <label>본인의 비공개 저장소<input name="repository" placeholder="https://github.com/계정/저장소" required disabled={busy} /></label>
         <label>GitHub 연결 토큰<input name="token" type="password" autoComplete="off" placeholder="github_pat_…" required disabled={busy} /></label>
         <p className="tiny muted">README가 있는 비공개 저장소를 준비하고, 해당 저장소만 선택한 토큰에 Contents 읽기·쓰기를 허용해 주세요. 토큰은 암호화해 보관하며 화면에 다시 표시하지 않습니다.</p>
-        <a className="text-button" href="https://github.com/settings/personal-access-tokens/new?name=daylight+work+records&description=Save+manual+daylight+records+to+one+private+repository&contents=write&expires_in=90" target="_blank" rel="noreferrer">GitHub에서 연결 토큰 만들기<ExternalLink size={12} /></a>
+        <a className="text-button" href="https://github.com/settings/personal-access-tokens/new?name=Dailog+work+records&description=Save+manual+Dailog+records+to+one+private+repository&contents=write&expires_in=90" target="_blank" rel="noreferrer">GitHub에서 연결 토큰 만들기<ExternalLink size={12} /></a>
         <button className="button secondary compact" disabled={busy}>저장소 연결</button>
       </form>}
     </details>}
@@ -226,7 +226,7 @@ function RecordForm({ artifactId, stages, stageId, tasks, materials, uploadsAvai
       for (const file of files) { await attach(id, file); setFiles(current => current.filter(item => item !== file)); }
       if (saveGithub) await saveGithub(id);
       await onSaved(); onClose();
-    } catch (error) { onError(`${id ? "입력한 기록은 daylight에 남아 있어요. 저장을 다시 시도해 주세요. " : ""}${error instanceof Error ? error.message : "저장하지 못했어요."}`); await onSaved().catch(() => {}); }
+    } catch (error) { onError(`${id ? "입력한 기록은 Dailog에 남아 있어요. 저장을 다시 시도해 주세요. " : ""}${error instanceof Error ? error.message : "저장하지 못했어요."}`); await onSaved().catch(() => {}); }
     finally { setSaving(false); }
   }}>
     <fieldset disabled={saving || Boolean(createdId)}>
@@ -238,7 +238,7 @@ function RecordForm({ artifactId, stages, stageId, tasks, materials, uploadsAvai
     </fieldset>
     <label>보고서·이미지<input type="file" multiple accept=".pdf,.png,.jpg,.jpeg,.gif,.webp" disabled={saving || !uploadsAvailable} onChange={event => setFiles(current => [...current, ...Array.from(event.target.files ?? [])])} /><small>{uploadsAvailable ? "파일당 10MB · 전체 첨부 저장 공간 200MB · PDF, PNG, JPG, GIF, WebP" : "파일을 첨부할 수 없어요."}</small></label>
     {!!files.length && <ul className="work-file-queue">{files.map((file, index) => <li key={`${file.name}-${index}`}>{file.name}<button type="button" className="icon-button" aria-label={`${file.name} 첨부 취소`} disabled={saving} onClick={() => setFiles(current => current.filter((_, i) => i !== index))}><X size={12} /></button></li>)}</ul>}
-    {!saveGithub && <p className="tiny muted">현재 daylight에 저장됩니다. ‘GitHub 저장소 연결’에서 연결한 뒤 기록을 GitHub에 저장할 수 있어요.</p>}
+    {!saveGithub && <p className="tiny muted">현재 Dailog에 저장됩니다. ‘GitHub 저장소 연결’에서 연결한 뒤 기록을 GitHub에 저장할 수 있어요.</p>}
     <div className="work-actions"><button type="button" className="text-button" disabled={saving} onClick={onClose}>닫기</button><button className="button primary compact" disabled={saving}>{saving ? "저장 중…" : createdId ? "저장 다시 시도" : saveGithub ? "GitHub에 저장" : materials ? "자료 저장" : "기록 저장"}</button></div>
   </form>;
 }
@@ -248,7 +248,7 @@ function EntryCard({ entry, artifacts, detail, materials, busy, uploadsAvailable
   return <article className="card work-entry">
     {entry.provider === "manual" && <div className="work-entry-github">
       <button className="text-button" disabled={busy || !saveGithub} onClick={() => void run(async () => { await saveGithub!(entry.id); })}><GitBranch size={13} />GitHub에 저장</button>
-      {versions.length ? <details><summary>저장한 버전 {versions.length}개</summary><ul>{versions.map(version => <li key={version.id}><a href={workGithubUrl(version)} target="_blank" rel="noreferrer">{stamp(version.savedAt)} · 기록과 산출물<ExternalLink size={11} /></a></li>)}</ul></details> : <span className="tiny muted">daylight에 저장됨</span>}
+      {versions.length ? <details><summary>저장한 버전 {versions.length}개</summary><ul>{versions.map(version => <li key={version.id}><a href={workGithubUrl(version)} target="_blank" rel="noreferrer">{stamp(version.savedAt)} · 기록과 산출물<ExternalLink size={11} /></a></li>)}</ul></details> : <span className="tiny muted">Dailog에 저장됨</span>}
     </div>}
     <div className="work-entry-meta"><time dateTime={entry.occurredAt}>{stamp(entry.occurredAt)}</time><span>{entry.stageTitle || "단계 미지정"}</span>{!materials && <><span>{workKinds[entry.kind]}</span><span>{workProviders[entry.provider]}</span></>}<button className={`icon-button ${entry.featured ? "starred" : ""}`} aria-label="포트폴리오에 포함" aria-pressed={Boolean(entry.featured)} disabled={busy} onClick={() => void onChange({ op: "entry.patch", id: entry.id, featured: !entry.featured })}><Star size={14} /></button></div>
     {editing ? <form className="work-form" onSubmit={event => { event.preventDefault(); const form = new FormData(event.currentTarget); void run(async () => { await api("", { op: "entry.patch", id: entry.id, title: form.get("title"), body: form.get("body") }); setEditing(false); }); }}><label>{materials ? "자료 이름" : "기록 제목"}<input name="title" defaultValue={entry.title} maxLength={240} required /></label><label>{materials ? "활용 메모" : "내용"}<textarea name="body" defaultValue={entry.body} maxLength={8000} rows={4} /></label><div className="work-actions"><button type="button" className="text-button" onClick={() => setEditing(false)}>취소</button><button className="button secondary compact" disabled={busy}>저장</button></div></form> : <><h3>{entry.title}</h3>{entry.body && (materials ? <details className="work-material-note"><summary>활용 메모</summary><p className="work-entry-body">{entry.body}</p></details> : <p className="work-entry-body">{entry.body}</p>)}</>}

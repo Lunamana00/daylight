@@ -39,7 +39,7 @@ struct DesktopCalendarView: View {
             } else {
                 VStack(spacing: 18) {
                     Image(systemName: "sun.max").font(.system(size: 42, weight: .light))
-                    Text("하루가 한눈에, daylight").font(.title2.weight(.medium))
+                    Text("하루가 한눈에, Dailog").font(.title2.weight(.medium))
                     Text("할 일과 Google 일정을 큰 달력에서 정리하세요.").foregroundStyle(.secondary)
                     Button("Google로 로그인") { Task { await connection.signIn() } }
                         .buttonStyle(.borderedProminent).disabled(connection.working)
