@@ -1,7 +1,7 @@
 import AppIntents
 
 struct SyncDaylight: AppIntent {
-    static let title: LocalizedStringResource = "daylight 동기화"
+    static let title: LocalizedStringResource = "Dailog 동기화"
     static let isDiscoverable = false
     static var supportedModes: IntentModes { [.background, .foreground(.dynamic)] }
 
@@ -20,7 +20,7 @@ struct SyncDaylight: AppIntent {
 }
 
 struct SetDaylightTaskDone: AppIntent {
-    static let title: LocalizedStringResource = "daylight 할 일 완료 상태 변경"
+    static let title: LocalizedStringResource = "Dailog 할 일 완료 상태 변경"
     static let isDiscoverable = false
     static var supportedModes: IntentModes { [.background, .foreground(.dynamic)] }
 

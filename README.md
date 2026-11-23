@@ -1,4 +1,6 @@
-# daylight
+# Dailog
+
+[Open Dailog](https://daylight-google.galaxycoreadvence.workers.dev) · [Mac installer](https://github.com/Lunamana00/daylight/releases/tag/v1.4.2-beta.1) · [Mac setup guide](https://github.com/Lunamana00/daylight/blob/v1.4.2-beta.1/docs/mac-install.md)
 
 Set your own daily tasks. See what other people plan and complete.
 

@@ -43,7 +43,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
-		A10000000000000000000020 /* daylight.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; path = daylight.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		A10000000000000000000020 /* Dailog.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; path = Dailog.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A10000000000000000000021 /* DaylightWidget.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; path = DaylightWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		B10000000000000000000001 /* DaylightApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DaylightApp.swift; sourceTree = "<group>"; };
 		B10000000000000000000002 /* PlannerConnection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlannerConnection.swift; sourceTree = "<group>"; };
@@ -88,7 +88,7 @@
 		A10000000000000000000003 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				A10000000000000000000020 /* daylight.app */,
+				A10000000000000000000020 /* Dailog.app */,
 				A10000000000000000000021 /* DaylightWidget.appex */,
 			);
 			name = Products;
@@ -142,8 +142,8 @@
 				A10000000000000000000017 /* PBXTargetDependency */,
 			);
 			name = Daylight;
-			productName = daylight;
-			productReference = A10000000000000000000020 /* daylight.app */;
+			productName = Dailog;
+			productReference = A10000000000000000000020 /* Dailog.app */;
 			productType = "com.apple.product-type.application";
 		};
 		A10000000000000000000011 /* DaylightWidget */ = {
@@ -260,7 +260,8 @@
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = App/Info.plist;
 				PRODUCT_BUNDLE_IDENTIFIER = com.lunamana.daylight;
-				PRODUCT_NAME = daylight;
+				PRODUCT_MODULE_NAME = daylight;
+				PRODUCT_NAME = Dailog;
 				REGISTER_APP_GROUPS = NO;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) DAYLIGHT_HOST";
 			};
@@ -279,7 +280,8 @@
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = App/Info.plist;
 				PRODUCT_BUNDLE_IDENTIFIER = com.lunamana.daylight;
-				PRODUCT_NAME = daylight;
+				PRODUCT_MODULE_NAME = daylight;
+				PRODUCT_NAME = Dailog;
 				REGISTER_APP_GROUPS = NO;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) DAYLIGHT_HOST";
 			};

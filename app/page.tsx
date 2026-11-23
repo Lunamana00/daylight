@@ -10,7 +10,7 @@ export default async function Home() {
   if (googleLogin) {
     if (!await getDaylightSession(await headers())) {
       return <main className="min-h-screen flex flex-col items-center justify-center gap-4">
-        <h1 className="text-xl font-semibold">daylight</h1>
+        <h1 className="text-xl font-semibold">Dailog</h1>
         <a className="button primary" href="/auth/google/start">Google로 로그인</a>
       </main>;
     }

@@ -3,7 +3,7 @@ import SwiftUI
 import WidgetKit
 
 struct DaylightWidgetOptions: WidgetConfigurationIntent {
-    static let title: LocalizedStringResource = "daylight 표시 설정"
+    static let title: LocalizedStringResource = "Dailog 표시 설정"
 
     @Parameter(title: "Google 일정 표시", default: true)
     var showCalendar: Bool
@@ -52,7 +52,7 @@ struct DaylightWidgetView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 5) {
             HStack(spacing: 6) {
-                Image(systemName: "sun.max").widgetAccentable().accessibilityLabel("daylight")
+                Image(systemName: "sun.max").widgetAccentable().accessibilityLabel("Dailog")
                 Text(Daylight.shortDate(Daylight.dayKey(entry.date))).font(.headline.monospacedDigit())
                 Spacer()
                 if let snapshot = entry.snapshot {
@@ -63,7 +63,7 @@ struct DaylightWidgetView: View {
                 Button(intent: SyncDaylight()) {
                     Image(systemName: "arrow.clockwise").font(.caption).frame(width: 26, height: 24)
                 }
-                .buttonStyle(.plain).accessibilityLabel("daylight 동기화").help("캘린더와 할 일 동기화")
+                .buttonStyle(.plain).accessibilityLabel("Dailog 동기화").help("캘린더와 할 일 동기화")
             }
 
             if let snapshot = entry.snapshot {
@@ -93,7 +93,7 @@ struct DaylightWidgetView: View {
                 }.font(.caption2).foregroundStyle(.secondary)
             } else {
                 Spacer(minLength: 0)
-                Link("daylight 열기", destination: Daylight.openApp).font(.caption)
+                Link("Dailog 열기", destination: Daylight.openApp).font(.caption)
                 Spacer(minLength: 0)
             }
         }
@@ -108,7 +108,7 @@ struct DaylightWidget: Widget {
         AppIntentConfiguration(kind: Daylight.widgetKind, intent: DaylightWidgetOptions.self, provider: DaylightProvider()) { entry in
             DaylightWidgetView(entry: entry)
         }
-        .configurationDisplayName("daylight")
+        .configurationDisplayName("Dailog")
         .description("오늘 할 일과 완료 상태")
         .supportedFamilies([.systemMedium])
     }

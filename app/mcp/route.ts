@@ -3,6 +3,7 @@ import { getDaylightSession } from "../identity";
 import { day, listMilestones, PlannerError, readDay, syncMilestones, today } from "../../lib/planner-core";
 
 export const dynamic = "force-dynamic";
+const serverInfo = { name: "daylight", title: "Dailog", version: "1.0.0" };
 const dateSchema = { type: "string", pattern: "^\\d{4}-\\d{2}-\\d{2}$" };
 const tools = [
   { name: "get_daily_plan", description: "Read team members' manually written daily tasks, completion states, daily focus notes, and upcoming shared milestones. Dates use Asia/Seoul. Never infer that a milestone is a daily task. This tool cannot change daily tasks.", inputSchema: { type: "object", properties: { date: dateSchema }, additionalProperties: false }, annotations: { readOnlyHint: true, openWorldHint: false } },
@@ -27,8 +28,8 @@ export async function POST(request: Request) {
     id = rpc.id ?? null;
     if (rpc.method.startsWith("notifications/")) return new Response(null, { status: 202, headers });
     let result: unknown;
-    if (rpc.method === "server/discover") result = { supportedVersions: ["2026-07-28"], capabilities: { tools: {} }, serverInfo: { name: "daylight", version: "1.0.0" } };
-    else if (rpc.method === "initialize") result = { protocolVersion: "2025-03-26", capabilities: { tools: {} }, serverInfo: { name: "daylight", version: "1.0.0" } };
+    if (rpc.method === "server/discover") result = { supportedVersions: ["2026-07-28"], capabilities: { tools: {} }, serverInfo };
+    else if (rpc.method === "initialize") result = { protocolVersion: "2025-03-26", capabilities: { tools: {} }, serverInfo };
     else if (rpc.method === "ping") result = {};
     else if (rpc.method === "tools/list") result = { tools: calendarSync ? tools : tools.filter(tool => tool.name !== "sync_google_calendar_milestones").map(tool => ({ ...tool, description: tool.name === "get_daily_plan" ? "Read each person's daily tasks and completion state, plus the signed-in person's private calendar events. Calendar events are separate from daily tasks." : "Read only the signed-in person's saved Google Calendar events. syncedAt shows when these events were last imported." })) };
     else if (rpc.method === "tools/call") {

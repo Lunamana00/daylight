@@ -2,7 +2,7 @@
 
 ## Set up the Google server
 
-1. Sign in to Wrangler with the Cloudflare account for daylight.
+1. Sign in to Wrangler with the Cloudflare account for Dailog.
 2. Create a D1 database for the Google deployment. Copy `wrangler.google.example.jsonc` to `wrangler.google.jsonc` in this directory.
 3. Set the D1 database name and ID in the config. Set `DAYLIGHT_GOOGLE_ORIGIN` to the HTTPS origin of the new Worker. Use the origin without a trailing slash.
 4. Create a **Web application** OAuth client in Google Cloud. Set its redirect URI to the Worker origin followed by `/auth/google/callback`.
@@ -52,21 +52,21 @@ Basic Google sign-in uses only `openid` and `email`. Calendar access has a separ
 ## Connect personal calendars
 
 1. Enable Google Calendar API in the Google Cloud project. If the OAuth app is in Testing, add the Google account as a test user.
-2. Open **설정** in daylight. Select **Google 캘린더 선택**. Grant read access and background access in Google.
-3. Select up to 20 calendars. Select **선택한 캘린더 자동 동기화** to import the next 90 days. Only your account can read these events in daylight.
+2. Open **설정** in Dailog. Select **Google 캘린더 선택**. Grant read access and background access in Google.
+3. Select up to 20 calendars. Select **선택한 캘린더 자동 동기화** to import the next 90 days. Only your account can read these events in Dailog.
 4. The server updates the selected calendars every five minutes. Select **지금 동기화** on the web or the refresh button in the Mac widget for an immediate update.
-5. Use **캘린더 선택·다시 연결** to change the selected calendars. Clear a checkbox or select **자동 동기화 해제** to stop updates for a calendar. Imported events remain in daylight. Only the account that connected a calendar can change its connection.
+5. Use **캘린더 선택·다시 연결** to change the selected calendars. Clear a checkbox or select **자동 동기화 해제** to stop updates for a calendar. Imported events remain in Dailog. Only the account that connected a calendar can change its connection.
 
 The server encrypts Google refresh tokens with a key derived from `GOOGLE_CLIENT_SECRET`. Keep that secret stable. If you change it, connect the calendars again. Failed calendar imports keep the last saved events. Daily tasks and the saved event order do not change during an import.
 
-Google refresh tokens expire after seven days when the OAuth app is in Testing. Connect the calendars again when daylight shows **Google 다시 연결 필요**. Production OAuth configuration can require Google verification. The daylight account invite list controls access separately.
+Google refresh tokens expire after seven days when the OAuth app is in Testing. Connect the calendars again when Dailog shows **Google 다시 연결 필요**. Production OAuth configuration can require Google verification. The Dailog account invite list controls access separately.
 
 ## Install the Mac widget
 
 1. Install Xcode 26 or later. Open `macos/Daylight.xcodeproj` in Xcode.
 2. Select the same Apple signing team for **Daylight** and **DaylightWidget**. Set `DAYLIGHT_SERVER_URL` in the **Daylight** build settings to the Google Worker origin.
 3. Run **Daylight**. Select **Google로 로그인** and use an invited account.
-4. Open **Edit Widgets** on the desktop. Add the medium **daylight** widget. Select **Clear** in the Mac appearance settings for the system glass style.
+4. Open **Edit Widgets** on the desktop. Add the medium **Dailog** widget. Select **Clear** in the Mac appearance settings for the system glass style.
 
 The widget shows up to four tasks scheduled for today. This includes dated subtasks. The header shows the completion count for all tasks scheduled for today. Right-click the widget and select **Edit Widget** to change **Google 일정 표시**. The Mac app holds the session in Keychain. A completion check runs in the Mac app and changes the same task on the Worker.
 
