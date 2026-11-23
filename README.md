@@ -4,7 +4,8 @@ Set your own daily tasks. See what other people plan and complete.
 
 - **서로의 오늘** shows each person's tasks and completion state.
 - **내 할 일** opens with **작업·오늘 분할형**. The left pane holds long work, parent tasks, and tasks without dates in one list. The right pane shows tasks and subtasks scheduled for the selected day. Select a title to edit it. The weekly calendar stays below the task area. Other people cannot change your tasks.
-- Use **보기** to select **목록 전환형**. Switch between the selected day and **전체 작업**. The full list includes your past and future work and tasks without dates. Completed work is at the bottom. The browser remembers the layout. On a small screen, the split panes use one column.
+- A completed task stays in **완료한 작업** through its end date. Select a later day to see only current completions. Overdue tasks stay in the work list until you complete them.
+- Use **보기** to select **목록 전환형**. Switch between the selected day and **전체 작업**. The full list includes past and future work and tasks without dates. Expand **지난 완료 기록** for completed tasks that ended before the selected day. The browser remembers the layout. On a small screen, the split panes use one column.
 - Press Command+Enter in the new-task form to add a task. Press Enter in the title field to add a new line.
 - Clear **날짜 지정** to keep a task without a date. The date fields stay visible and disabled. Select the checkbox to enable them. Tasks without dates appear in the work list with a small **날짜 미정** label. Inside a long task, select **＋ 하위 할 일**. New subtasks start without a date and stay under their parent task. Select **오늘** or the calendar button to set a date. The item then becomes a daily task or a dated subtask. Its project stays the same. Undated items do not appear in daily counts or the Mac widget.
 - A task with no subtasks shows **＋ 하위 할 일**. A task with subtasks shows a list that you can collapse. Its add button is inside the list.

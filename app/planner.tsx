@@ -205,17 +205,24 @@ export default function Planner({ googleLogin = false }: { googleLogin?: boolean
     }} onOpenWorkLog={readOnly ? undefined : task => { setWorkTask(task); setView("work"); setModal(null); }} onDelete={removeTask} />;
   }
 
-  function catalogRows(tasks: Task[], empty: string) {
+  function catalogRows(tasks: Task[], empty: string, includeHistory = false) {
     const ordered = [...tasks, ...backlog.filter(item => !item.taskId)].sort((a, b) => a.sortOrder - b.sortOrder);
-    const active = ordered.filter(item => !item.done), finished = ordered.filter(item => item.done);
-    const row = (item: Task | BacklogItem) => "ownerId" in item
-      ? taskRow(item, { order: ordered, orderScope: "all", grouped: Boolean(item.endDate && item.endDate > item.date) || item.subtasks.length > 0 || Boolean(item.unscheduledCount) })
-      : <PlannerBacklogRow key={item.id} item={item} date={date} busy={busy} onChange={mutate} onDelete={removeBacklog} />;
+    const active = ordered.filter(item => !item.done);
+    const completed = ordered.filter(item => item.done);
+    const hasEnded = (item: Task | BacklogItem) => "date" in item && (item.endDate ?? item.date) < date;
+    const finished = completed.filter(item => !hasEnded(item));
+    const past = includeHistory ? completed.filter(hasEnded) : [];
     const move = (id: string, targetId: string, position: "before" | "after") => mutate({ op: "task.move", id, targetId, position, scope: "all" }, "순서를 변경했어요.");
+    const list = (items: Array<Task | BacklogItem>) => <PlannerSortableList className="task-list task-work-list" disabled={busy} onDraggingChange={setDragging} onMove={move}>
+      {items.map(item => "ownerId" in item
+        ? taskRow(item, { order: items, orderScope: "all", grouped: Boolean(item.endDate && item.endDate > item.date) || item.subtasks.length > 0 || Boolean(item.unscheduledCount) })
+        : <PlannerBacklogRow key={item.id} item={item} date={date} busy={busy} onChange={mutate} onDelete={removeBacklog} />)}
+    </PlannerSortableList>;
     return <>{catalogError && <p className="error-banner" role="alert">{catalogError}<button onClick={() => void load(date, true)}>다시 시도</button></p>}
       {catalog === null ? <p className="empty-tasks" role="status">{catalogError ? "작업을 불러오지 못했어요." : "작업 불러오는 중…"}</p> : <>
-        {active.length ? <PlannerSortableList className="task-list task-work-list" disabled={busy} onDraggingChange={setDragging} onMove={move}>{active.map(row)}</PlannerSortableList> : <p className="empty-tasks">{empty}</p>}
-        {finished.length > 0 && <details className="completed-work"><summary>완료한 작업 <span>{finished.length}</span></summary><PlannerSortableList className="task-list task-work-list" disabled={busy} onDraggingChange={setDragging} onMove={move}>{finished.map(row)}</PlannerSortableList></details>}
+        {active.length ? list(active) : <p className="empty-tasks">{empty}</p>}
+        {finished.length > 0 && <details className="completed-work"><summary>완료한 작업 <span>{finished.length}</span></summary>{list(finished)}</details>}
+        {past.length > 0 && <details className="completed-work"><summary>지난 완료 기록 <span>{past.length}</span></summary>{list(past)}</details>}
       </>}
     </>;
   }
@@ -278,7 +285,7 @@ export default function Planner({ googleLogin = false }: { googleLogin?: boolean
                 try { localStorage.setItem("daylight.task-layout.v1", value); } catch { /* Keep the current choice in memory. */ }
               }}><option value="split">작업·오늘 분할형</option><option value="list">목록 전환형</option></select></label></div>
               {taskLayout === "list" && <div className="task-scope-switch" role="group" aria-label="작업 표시 범위"><button className={taskScope === "day" ? "selected" : ""} aria-pressed={taskScope === "day"} disabled={busy || dragging} onClick={() => setTaskScope("day")}>{date === today() ? "오늘" : "선택한 날"}</button><button className={taskScope === "all" ? "selected" : ""} aria-pressed={taskScope === "all"} disabled={busy || dragging} onClick={() => setTaskScope("all")}>전체 작업</button></div>}
-              {taskLayout === "split" ? <div className="task-split-panes"><section className="task-group-pane" aria-label="작업 관리"><div className="task-pane-heading"><h3>진행 중인 일</h3></div>{catalogRows(groupTasks, "진행 중인 일이 없어요.")}</section>{dailyPanel}</div> : taskScope === "day" ? dailyPanel : <section className="task-all-pane" aria-label="전체 작업">{catalogRows(ownCatalog, "아직 등록한 작업이 없어요.")}</section>}
+              {taskLayout === "split" ? <div className="task-split-panes"><section className="task-group-pane" aria-label="작업 관리"><div className="task-pane-heading"><h3>진행 중인 일</h3></div>{catalogRows(groupTasks, "진행 중인 일이 없어요.")}</section>{dailyPanel}</div> : taskScope === "day" ? dailyPanel : <section className="task-all-pane" aria-label="전체 작업">{catalogRows(ownCatalog, "미완료 작업이 없어요.", true)}</section>}
               {composer}
             </section> : <p className="calendar-status" role="status">{error ? "이 날짜의 할 일을 불러오지 못했어요." : "할 일 불러오는 중…"}</p>)}
             {view === "mine" && <PlannerCalendar date={date} data={data} busy={busy} onChange={mutate} onSelectDate={selectDate} onManage={() => setModal("connections")} onOpenTask={openTask} />}

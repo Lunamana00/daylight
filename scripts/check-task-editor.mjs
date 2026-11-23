@@ -79,9 +79,9 @@ console.log('Task shortcut checks passed: Command Enter, newlines, Korean compos
 assert.ok(catalogRenderer);
 const createCatalogRenderer = new Function('backlog', 'catalog', 'catalogError', 'taskRow', 'PlannerBacklogRow', 'createElement', 'Fragment', 'date', 'busy', 'mutate', 'removeBacklog', 'PlannerSortableList', 'setDragging',
   ts.transpileModule(catalogRenderer, { compilerOptions: { target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.React, jsxFactory: 'createElement', jsxFragmentFactory: 'Fragment' } }).outputText + '\nreturn catalogRows;');
-const renderCatalog = (tasks, backlog) => renderToStaticMarkup(createCatalogRenderer(
-  backlog, tasks, '', value => createElement('li', { key: value.id }, value.title), PlannerBacklogRow, createElement, Fragment, task.date, false, async () => true, () => {}, PlannerSortableList, () => {},
-)(tasks, '작업 없음'));
+const renderCatalog = (tasks, backlog, date = task.date, includeHistory = false) => renderToStaticMarkup(createCatalogRenderer(
+  backlog, tasks, '', value => createElement('li', { key: value.id }, value.title), PlannerBacklogRow, createElement, Fragment, date, false, async () => true, () => {}, PlannerSortableList, () => {},
+)(tasks, '작업 없음', includeHistory));
 const undatedWork = { id: 'undated-work', title: '날짜 없는 작업', sortOrder: 2, taskId: null, taskTitle: null, taskDate: null, taskEndDate: null, projectId: null, projectTitle: null, projectHue: null };
 const mixedCatalog = renderCatalog([task, { ...task, id: 'finished', title: '끝낸 작업', done: 1 }], [
   undatedWork,
@@ -95,6 +95,18 @@ assert.match(renderCatalog([], []), /작업 없음/);
 assert.doesNotMatch(renderCatalog([], [undatedWork]), /작업 없음/, 'An undated-only list is not empty');
 assert.match(renderCatalog([task], [{ ...undatedWork, sortOrder: 0 }]), /날짜 없는 작업[\s\S]*강화학습 논문 발표/, 'A saved undated position can precede dated work');
 assert.match(mixedCatalog, /data-sort-handle="true" draggable="true"/, 'Undated work has an enabled drag handle');
+const dateCases = [
+  { ...task, id: 'expired', title: '지난 기간 작업', done: 1 },
+  { ...task, id: 'single', title: '지난 하루 작업', date: '2026-11-20', endDate: null, done: 1 },
+  { ...task, id: 'boundary', title: '선택일에 끝나는 작업', endDate: '2026-11-23', done: 1 },
+  { ...task, id: 'overdue', title: '마감이 지난 미완료 작업' },
+];
+const currentWork = renderCatalog(dateCases, [], '2026-11-23');
+assert.doesNotMatch(currentWork, /지난 기간 작업|지난 하루 작업|지난 완료 기록/);
+assert.match(currentWork, /마감이 지난 미완료 작업[\s\S]*완료한 작업 <span>1<\/span>[\s\S]*선택일에 끝나는 작업/);
+assert.match(renderCatalog(dateCases, [], '2026-11-23', true), /지난 완료 기록 <span>2<\/span>[\s\S]*지난 기간 작업[\s\S]*지난 하루 작업/);
+assert.match(renderCatalog(dateCases, [], '2026-11-20'), /지난 기간 작업/);
+assert.doesNotMatch(renderCatalog(dateCases, [], '2026-11-24'), /완료한 작업|선택일에 끝나는 작업/);
 assert.doesNotMatch(render({ readOnly: true }), /data-sort-handle/, 'Other people cannot drag this task');
 console.log('Work list checks passed: undated work in the main list, parent-only subtasks, and completed work below.');
 
